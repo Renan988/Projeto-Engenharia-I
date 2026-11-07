@@ -56,3 +56,13 @@ classDiagram
     note for Sped "Observação: O status do SPED deve ser PENDENTE, GERADO ou ENVIADO."
 ```
 
+### Descrição das Entidades
+
+Descrição sucinta das entidades presentes no sistema.
+
+| Entidade | Descrição |
+|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Funcionario | Entidade que representa um Funcionário tem as informações: Int idFuncionario, String nome, String email, String senha, Boolean isAdmin, +solicitarAutorizacaoAcesso(), +manterFuncionario(). |
+| LogRastreabilidade | Entidade que representa o log do sistema tem as informações: Int idLog, Date dataHora, String acaoRealizada, +registrarLog(), +gerarDashboard(). |
+| Cliente | Entidade que representa um Cliente tem as informações: Int idCli, String cnpj, String razaoSocial, String telefoneWhatsApp, String emailContador, String regimeTributario, +consultarRegimeAPI(), +manterCliente(). |
+| Sped | Entidade que representa um registro SPED tem as informações: Int idSped, String mesReferencia, Int status, File arquivoRar, +atualizarStatus(), +realizarUpload(), +enviarEmailContador(), +marcarSped(), +enviarSped(). |
