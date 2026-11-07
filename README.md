@@ -7,7 +7,6 @@
 - José Samuel Silva Lima
 - Renan Medeiros Nogueira
 
-=======
 ## Tecnologias
 | Tecnologia | Área de Responsabilidade | Descrição do Papel no Projeto |
 | :--- | :--- | :--- |
