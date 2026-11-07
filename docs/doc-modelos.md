@@ -66,3 +66,45 @@ Descrição sucinta das entidades presentes no sistema.
 | LogRastreabilidade | Entidade que representa o log do sistema tem as informações: Int idLog, Date dataHora, String acaoRealizada, +registrarLog(), +gerarDashboard(). |
 | Cliente | Entidade que representa um Cliente tem as informações: Int idCli, String cnpj, String razaoSocial, String telefoneWhatsApp, String emailContador, String regimeTributario, +consultarRegimeAPI(), +manterCliente(). |
 | Sped | Entidade que representa um registro SPED tem as informações: Int idSped, String mesReferencia, Int status, File arquivoRar, +atualizarStatus(), +realizarUpload(), +enviarEmailContador(), +marcarSped(), +enviarSped(). |
+
+## Modelo de Dados (Entidade-Relacionamento)
+
+```mermaid
+erDiagram
+    FUNCIONARIO {
+        int idFuncionario PK
+        string nome
+        string email
+        string senha
+        boolean isAdmin
+    }
+
+    LOG_RASTREABILIDADE {
+        int idLog PK
+        date dataHora
+        string acaoRealizada
+        int idFuncionario FK
+        int idSped FK
+    }
+
+    CLIENTE {
+        int idCli PK
+        string cnpj
+        string razaoSocial
+        string telefoneWhatsApp
+        string emailContador
+        string regimeTributario
+    }
+
+    SPED {
+        int idSped PK
+        string mesReferencia
+        int status
+        blob arquivoRar
+        int idCli FK
+    }
+
+    FUNCIONARIO ||--o{ LOG_RASTREABILIDADE : "gera"
+    CLIENTE ||--o{ SPED : "possui"
+    SPED ||--o{ LOG_RASTREABILIDADE : "contem"
+```
