@@ -1,5 +1,13 @@
 # Projeto-Engenharia-I
 
+# Contribuidores
+- Eriky Rayan B. de Medeiros
+- Felipe Eduardo Silva Fernandes
+- Jefferson Willame Sena de Medeiros
+- José Samuel Silva Lima
+- Renan Medeiros Nogueira
+
+=======
 ## Tecnologias
 | Tecnologia | Área de Responsabilidade | Descrição do Papel no Projeto |
 | :--- | :--- | :--- |
