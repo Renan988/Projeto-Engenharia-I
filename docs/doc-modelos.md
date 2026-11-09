@@ -51,7 +51,7 @@ classDiagram
 
     Funcionario "1" -- "*" LogRastreabilidade
     Cliente "1" -- "*" Sped
-    Sped *--> LogRastreabilidade
+    LogRastreabilidade "0" -- "1" Sped
     
     note for Sped "Observação: O status do SPED deve ser PENDENTE, GERADO ou ENVIADO."
 ```
