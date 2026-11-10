@@ -178,3 +178,35 @@ erDiagram
 | LogRastreabilidade | Entidade que representa o log do sistema tem as informações: Int idLog, Date dataHora, String acaoRealizada, +registrarLog(), +gerarDashboard(). |
 | Cliente | Entidade que representa um Cliente tem as informações: Int idCli, String cnpj, String razaoSocial, String telefoneWhatsApp, String emailContador, String regimeTributario, +consultarRegimeAPI(), +manterCliente(). |
 | Sped | Entidade que representa um registro SPED tem as informações: Int idSped, String mesReferencia, Int status, File arquivoRar, +atualizarStatus(), +realizarUpload(), +enviarEmailContador(), +marcarSped(), +enviarSped(). |
+
+## Lista de Requisitos Não-Funcionais
+
+Requisito                                 | Descrição   |
+---------                                 | ----------- |
+RNF001 - Segurança | O sistema deve estar em conformidade com as leis de proteção de dados (como LGPD), incluindo anonimização ou exclusão de dados. |
+RNF002 - Desempenho e Eficiência | Tempo de resposta: páginas ou APIs devem responder em menos de 5 segundos sob carga normal. |
+RNF003 - Disponibilidade | O sistema deve estar disponível 99,9% do tempo (24/7). |
+RNF004 - Usabilidade | Interface intuitiva: o sistema deve seguir padrões de UI/UX, exigindo treinamento mínimo. |
+RNF005 - Compatibilidade | Navegadores/dispositivos: o sistema deve ser responsivo e funcionar nos principais navegadores (Chrome, Firefox, Safari, Edge) e dispositivos móveis. |
+RNF006 - Dependência da API do WhatsApp | O funcionamento do envio de mensagens está sujeito à disponibilidade e estabilidade da API do WhatsApp. |
+RNF007 - Dependência do serviço de e-mail | O funcionamento do envio de SPEDs via e-mail está sujeito à disponibilidade e estabilidade do serviço de e-mail configurado. |
+
+## Riscos
+
+Tabela com o mapeamento dos riscos do projeto, as possíveis soluções e os responsáveis.
+
+Data | Risco | Prioridade | Responsável | Status | Providência/Solução |
+------ | ------ | ------ | ------ | ------ | ------ |
+10/11/2026 | Indisponibilidade ou instabilidade da API do WhatsApp | Alta | Todos | Vigente | Implementar mecanismo de retentativa de envio e alertas de falha; monitorar a disponibilidade do serviço |
+10/11/2026 | Indisponibilidade do serviço de e-mail | Alta | Todos | Vigente | Implementar retentativa de envio e permitir que o usuário tente novamente posteriormente |
+10/11/2026 | Falha na consulta do CNPJ/regime tributário via API | Média | Todos | Vigente | Permitir o cadastro manual dos dados do cliente quando a API estiver indisponível |
+10/11/2026 | Não conformidade com a LGPD | Alta | Todos | Vigente | Revisar o tratamento de dados pessoais (anonimização/exclusão) a cada Sprint |
+10/11/2026 | Não aprendizado das tecnologias utilizadas (TypeScript, Django, Supabase) | Média | Todos | Vigente | Reforçar estudos sobre as ferramentas e realizar pareamento com os membros que têm maior experiência |
+10/11/2026 | Atrasos na geração mensal dos SPEDs | Média | Product Owner | Vigente | Acompanhar a fila de atendimento via dashboard e priorizar os SPEDs por regime tributário |
+
+### Referências
+
+- Modelo BSI - Doc 001 - Documento de Visão. Disponível em: https://docs.google.com/document/d/1DPBcyGHgflmz5RDsZQ2X8KVBPoEF5PdAz9BBNFyLa6A/edit
+- Scrum Guide 2020. Disponível em: https://scrumguides.org
+- Lei nº 13.709/2018 (Lei Geral de Proteção de Dados Pessoais - LGPD)
+- Receita Federal do Brasil. Sistema Público de Escrituração Digital (SPED). Disponível em: https://www.gov.br/receitafederal
