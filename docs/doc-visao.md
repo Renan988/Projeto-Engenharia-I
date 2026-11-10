@@ -125,3 +125,56 @@ RF06.01 - Visualizar Produtividade | Exibe indicadores da produtividade mensal d
 RF06.02 - Visualizar Demandas      | Exibe o andamento das demandas fiscais do mês na fila de atendimento. | Funcionário |
 
 ---
+
+### Modelo Conceitual
+
+Abaixo apresentamos o modelo conceitual usando o **Mermaid**.
+
+```mermaid
+erDiagram
+    FUNCIONARIO ||--o{ LOG_RASTREABILIDADE : "realiza"
+    CLIENTE ||--o{ SPED : "possui"
+    SPED |o--o{ LOG_RASTREABILIDADE : "vinculado_a"
+
+    FUNCIONARIO {
+        int idFuncionario PK
+        string nome
+        string email
+        string senha
+        boolean isAdmin
+    }
+
+    LOG_RASTREABILIDADE {
+        int idLog PK
+        datetime dataHora
+        string acaoRealizada
+        int idFuncionario FK
+        int idSped FK "Nulo se for ação geral"
+    }
+
+    CLIENTE {
+        string cnpj PK
+        string nomeEmpresa
+        string razaoSocial
+        string telefoneWhatsApp
+        string emailContador
+        string regimeTributario
+    }
+
+    SPED {
+        int idSped PK
+        string mesReferencia
+        string status "PENDENTE, GERADO, ENVIADO"
+        string arquivoRar
+        string cnpj_cliente FK
+    }
+```
+
+#### Descrição das Entidades
+
+| Entidade | Descrição |
+|----------|-----------|
+| Funcionario | Entidade que representa um Funcionário tem as informações: Int idFuncionario, String nome, String email, String senha, Boolean isAdmin, +solicitarAutorizacaoAcesso(), +manterFuncionario(). |
+| LogRastreabilidade | Entidade que representa o log do sistema tem as informações: Int idLog, Date dataHora, String acaoRealizada, +registrarLog(), +gerarDashboard(). |
+| Cliente | Entidade que representa um Cliente tem as informações: Int idCli, String cnpj, String razaoSocial, String telefoneWhatsApp, String emailContador, String regimeTributario, +consultarRegimeAPI(), +manterCliente(). |
+| Sped | Entidade que representa um registro SPED tem as informações: Int idSped, String mesReferencia, Int status, File arquivoRar, +atualizarStatus(), +realizarUpload(), +enviarEmailContador(), +marcarSped(), +enviarSped(). |
