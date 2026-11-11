@@ -153,7 +153,8 @@ erDiagram
     }
 
     CLIENTE {
-        string cnpj PK
+        int idCli PK
+        string cnpj
         string nomeEmpresa
         string razaoSocial
         string telefoneWhatsApp
@@ -164,9 +165,9 @@ erDiagram
     SPED {
         int idSped PK
         string mesReferencia
-        string status "PENDENTE, GERADO, ENVIADO"
+        id status "PENDENTE, GERADO, ENVIADO"
         string arquivoRar
-        string cnpj_cliente FK
+        string idCli FK
     }
 ```
 
