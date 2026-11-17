@@ -71,3 +71,26 @@ class FuncionarioUS01Tests(APITestCase):
         )
         self.assertEqual(resp_delete.status_code, status.HTTP_200_OK)
         self.assertFalse(Funcionario.objects.filter(email='novo@intech.com.br').exists())
+
+    def test_autenticacao_token_supabase(self):
+        """Verifica autenticação via token JWT emitido pelo Supabase Auth."""
+        import jwt
+        from django.test import override_settings
+
+        segredo_supabase = 'segredo-jwt-supabase-teste-1234567890'
+        token_supabase = jwt.encode(
+            {
+                'sub': 'uuid-supabase-123',
+                'email': 'supabase.user@intech.com.br',
+                'user_metadata': {'nome': 'Usuário Supabase', 'isAdmin': True},
+            },
+            segredo_supabase,
+            algorithm='HS256',
+        )
+
+        with override_settings(SUPABASE_JWT_SECRET=segredo_supabase):
+            self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_supabase}')
+            resp = self.client.get('/api/funcionarios/me/')
+            self.assertEqual(resp.status_code, status.HTTP_200_OK)
+            self.assertEqual(resp.data['email'], 'supabase.user@intech.com.br')
+            self.assertTrue(resp.data['isAdmin'])

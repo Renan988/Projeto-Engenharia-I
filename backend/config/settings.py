@@ -1,11 +1,13 @@
 """
 Configurações do Django para o Sistema de Controle de Fluxo (Workflow) de SPEDs - Intech Sistemas.
-Construído a partir do Documento de Visão (doc-visao.md) e Documento de Modelos (doc-modelos.md).
+Integrado com Supabase (Banco de Dados PostgreSQL + Supabase Auth).
 """
 
 import os
+import socket
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 import dj_database_url
 from dotenv import load_dotenv
@@ -79,13 +81,55 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# Banco de Dados: Suporta Supabase (PostgreSQL via DATABASE_URL) e SQLite local
-DATABASES = {
-    'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
-    )
-}
+# ==============================================================================
+# BANCO DE DADOS E SUPABASE (PostgreSQL na nuvem + Autenticação via HTTPS 443)
+# ==============================================================================
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
+IS_POSTGRES = DATABASE_URL.startswith(('postgres://', 'postgresql://'))
+
+
+def _porta_postgres_acessivel(db_url: str) -> bool:
+    """
+    Verifica rapidamente (1.5s) se a rede atual permite saída na porta 5432/6543.
+    Redes públicas/universitárias (como eduroam) frequentemente bloqueiam a porta 5432,
+    permitindo apenas a porta 443 (HTTPS - usada pela API do Supabase Auth/REST).
+    """
+    try:
+        parsed = urlparse(db_url)
+        host = parsed.hostname
+        port = parsed.port or 5432
+        if not host or '[' in db_url:
+            return False
+        with socket.create_connection((host, port), timeout=1.5):
+            return True
+    except OSError:
+        return False
+
+
+if IS_POSTGRES and _porta_postgres_acessivel(DATABASE_URL):
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=0 if ':6543/' in DATABASE_URL else 600,
+            ssl_require='supabase.co' in DATABASE_URL,
+        )
+    }
+    DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 5
+else:
+    # Caso a porta 5432 esteja bloqueada pelo firewall da rede Wi-Fi atual,
+    # mantém cache local operacional enquanto usa o Supabase Auth e REST via porta 443 (HTTPS)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+# Credenciais do Supabase Auth / API (Operam via HTTPS porta 443, nunca bloqueada)
+SUPABASE_URL = os.getenv('SUPABASE_URL', '').strip()
+SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '').strip()
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '').strip()
+SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET', '').strip()
 
 # Modelo customizado de Usuário / Funcionário (US01 / Tabela FUNCIONARIO)
 AUTH_USER_MODEL = 'funcionarios.Funcionario'
@@ -120,9 +164,10 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Configuração do Django REST Framework
+# Configuração do Django REST Framework (Suporta Tokens do Supabase Auth e SimpleJWT)
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'funcionarios.authentication.SupabaseJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
@@ -152,7 +197,7 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'Intech Sistemas - API de Controle de Fluxo de SPEDs',
     'DESCRIPTION': (
         'Sistema de controle de fluxo (workflow) para automatizar e organizar '
-        'o processo de geração mensal de SPEDs da Intech Sistemas.'
+        'o processo de geração mensal de SPEDs da Intech Sistemas (Django + Supabase).'
     ),
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
