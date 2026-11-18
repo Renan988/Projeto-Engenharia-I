@@ -1,5 +1,7 @@
 """Testes unitários do módulo de Auditoria (US05 e US06)."""
 
+import uuid
+
 from django.test import TestCase
 
 from funcionarios.models import Funcionario
@@ -12,7 +14,7 @@ class AuditoriaTests(TestCase):
         func = Funcionario.objects.create_user(
             email='auditor@intech.com.br',
             nome='Auditor Fiscal',
-            senha='senha123',
+            supabase_user_id=uuid.uuid4(),
         )
         log = LogRastreabilidade.registrarLog(
             acao='Executou verificação de conformidade LGPD',

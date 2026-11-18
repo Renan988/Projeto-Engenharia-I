@@ -1,5 +1,7 @@
 """Testes automatizados para US03 (Manter SPED), US04 (Enviar SPED), US05 (Rastreabilidade) e US06 (Dashboard)."""
 
+import uuid
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -16,7 +18,7 @@ class SpedWorkflowTests(APITestCase):
         self.funcionario = Funcionario.objects.create_user(
             email='operador@intech.com.br',
             nome='Operador Fiscal',
-            senha='senha123',
+            supabase_user_id=uuid.uuid4(),
             isAdmin=False,
         )
         self.client.force_authenticate(user=self.funcionario)

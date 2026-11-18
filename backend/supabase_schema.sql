@@ -1,20 +1,50 @@
 -- ============================================================================
 -- SCRIPT SQL PARA CRIAÇÃO DAS TABELAS NO SUPABASE (SQL EDITOR)
 -- Baseado no Documento de Modelos (docs/doc-modelos.md) e Visão (docs/doc-visao.md)
+--
+-- Issue #19: a tabela FUNCIONARIO guarda apenas o perfil funcional. Identidade,
+-- e-mail de login e senha são gerenciados pelo Supabase Auth (auth.users).
 -- ============================================================================
 
 -- 1. Tabela FUNCIONARIO (US01 - Manter Usuário)
+-- "supabaseUserId" referencia logicamente auth.users(id) e é único por identidade.
+-- A senha/hash NÃO é armazenada nesta tabela (pertence ao Supabase Auth).
 CREATE TABLE IF NOT EXISTS "FUNCIONARIO" (
     "idFuncionario" SERIAL PRIMARY KEY,
+    "supabaseUserId" UUID NULL,
     "nome" VARCHAR(150) NOT NULL,
     "email" VARCHAR(150) UNIQUE NOT NULL,
-    "senha" VARCHAR(255) NOT NULL,
     "isAdmin" BOOLEAN NOT NULL DEFAULT FALSE,
     "is_active" BOOLEAN NOT NULL DEFAULT TRUE,
     "is_staff" BOOLEAN NOT NULL DEFAULT FALSE,
     "is_superuser" BOOLEAN NOT NULL DEFAULT FALSE,
-    "last_login" TIMESTAMPTZ NULL
+    "last_login" TIMESTAMPTZ NULL,
+    CONSTRAINT unique_funcionario_supabase_user_id UNIQUE ("supabaseUserId")
 );
+
+-- Migração idempotente para bancos criados antes da Issue #19:
+-- remove a coluna de senha e adiciona o vínculo com o Supabase Auth.
+ALTER TABLE "FUNCIONARIO" DROP COLUMN IF EXISTS "senha";
+ALTER TABLE "FUNCIONARIO" ADD COLUMN IF NOT EXISTS "supabaseUserId" UUID;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_attribute a
+          ON a.attrelid = c.conrelid
+         AND a.attnum = ANY (c.conkey)
+        WHERE c.conrelid = 'public."FUNCIONARIO"'::regclass
+          AND c.contype = 'u'
+          AND a.attname = 'supabaseUserId'
+    ) THEN
+        ALTER TABLE "FUNCIONARIO"
+            ADD CONSTRAINT unique_funcionario_supabase_user_id
+            UNIQUE ("supabaseUserId");
+    END IF;
+END
+$$;
 
 -- 2. Tabela CLIENTE (US02 - Manter Cliente)
 CREATE TABLE IF NOT EXISTS "CLIENTE" (
@@ -52,22 +82,23 @@ CREATE TABLE IF NOT EXISTS "LOG_RASTREABILIDADE" (
 
 -- ============================================================================
 -- GATILHO AUTOMÁTICO: Sincroniza novos usuários do Supabase Auth (auth.users)
--- diretamente na tabela FUNCIONARIO do sistema!
+-- diretamente na tabela FUNCIONARIO do sistema, sem copiar a senha!
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.sincronizar_usuario_supabase_auth()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public."FUNCIONARIO" ("nome", "email", "senha", "isAdmin", "is_active", "is_staff", "is_superuser")
+    INSERT INTO public."FUNCIONARIO" ("supabaseUserId", "nome", "email", "isAdmin", "is_active", "is_staff", "is_superuser")
     VALUES (
+        NEW.id,
         COALESCE(NEW.raw_user_meta_data->>'nome', split_part(NEW.email, '@', 1)),
         NEW.email,
-        COALESCE(NEW.encrypted_password, 'supabase_auth_managed'),
         COALESCE((NEW.raw_user_meta_data->>'isAdmin')::boolean, FALSE),
         TRUE,
         COALESCE((NEW.raw_user_meta_data->>'isAdmin')::boolean, FALSE),
         COALESCE((NEW.raw_user_meta_data->>'isAdmin')::boolean, FALSE)
     )
-    ON CONFLICT ("email") DO NOTHING;
+    ON CONFLICT ("email") DO UPDATE
+        SET "supabaseUserId" = COALESCE("FUNCIONARIO"."supabaseUserId", EXCLUDED."supabaseUserId");
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

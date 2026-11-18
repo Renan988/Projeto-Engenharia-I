@@ -1,7 +1,14 @@
 """
 Modelo de dados da entidade Funcionario (Tabela FUNCIONARIO).
 Referência: docs/doc-modelos.md e docs/doc-visao.md (US01 - Manter Usuário).
+
+A partir da Issue #19, identidade e senha são gerenciadas exclusivamente pelo
+Supabase Auth (schema `auth.users`). A tabela FUNCIONARIO guarda apenas o perfil
+funcional (nome, e-mail de exibição, nível de acesso) e o vínculo único com o
+identificador da identidade Supabase (`supabaseUserId`).
 """
+
+import uuid
 
 from django.contrib.auth.models import (
     AbstractBaseUser,
@@ -12,63 +19,119 @@ from django.db import models
 
 
 class FuncionarioManager(BaseUserManager):
-    """Gerenciador customizado para criação de Funcionários e Administradores."""
+    """Gerenciador de perfis de Funcionário (sem armazenamento de senhas)."""
 
-    def create_user(self, email: str, nome: str, senha: str = None, **extra_fields):
+    def create_user(self, email: str, nome: str, isAdmin: bool = False, **extra_fields):
+        """
+        Cria o perfil funcional de um Funcionário.
+
+        Credenciais não são persistidas neste modelo: qualquer argumento de senha
+        recebido por compatibilidade é descartado. O usuário correspondente deve
+        ser criado no Supabase Auth e vinculado por `supabase_user_id`.
+        """
         if not email:
             raise ValueError('O campo de e-mail é obrigatório.')
         if not nome:
             raise ValueError('O campo nome é obrigatório.')
 
         email = self.normalize_email(email)
-        is_admin = extra_fields.pop('isAdmin', False)
-        extra_fields.setdefault('is_staff', is_admin)
-        extra_fields.setdefault('is_superuser', is_admin)
+        extra_fields.pop('password', None)
+        extra_fields.pop('senha', None)
+
+        isAdmin = bool(isAdmin)
+        extra_fields.setdefault('is_staff', isAdmin)
+        extra_fields.setdefault('is_superuser', isAdmin)
 
         funcionario = self.model(
             email=email,
             nome=nome,
-            isAdmin=is_admin,
+            isAdmin=isAdmin,
             **extra_fields,
         )
-        if senha:
-            funcionario.set_password(senha)
-        else:
-            password = extra_fields.get('password')
-            if password:
-                funcionario.set_password(password)
-            else:
-                funcionario.set_unusable_password()
-
         funcionario.save(using=self._db)
         return funcionario
 
     def create_superuser(self, email: str, nome: str, password: str = None, **extra_fields):
-        extra_fields['isAdmin'] = True
+        """
+        Mantém compatibilidade com o comando `createsuperuser` do Django.
+
+        O argumento `password` é ignorado: a autenticação ocorre no Supabase Auth.
+        """
         extra_fields['is_staff'] = True
         extra_fields['is_superuser'] = True
         return self.create_user(
             email=email,
             nome=nome,
-            senha=password,
+            isAdmin=True,
             **extra_fields,
         )
+
+    def resolver_por_identidade_supabase(
+        self,
+        supabase_user_id: str,
+        email: str = None,
+    ):
+        """
+        Resolve o perfil de Funcionário a partir do identificador da identidade
+        autenticada no Supabase Auth (`sub` do token).
+
+        Perfis criados antes da Issue #19 ainda não possuem vínculo. Para esses,
+        o vínculo é feito uma única vez pelo e-mail informado no token já validado
+        pelo Supabase, sem qualquer armazenamento de senha. Retorna `None` quando
+        não existe perfil correspondente.
+        """
+        if not supabase_user_id:
+            return None
+
+        try:
+            identidade = uuid.UUID(str(supabase_user_id))
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+        funcionario = self.filter(supabase_user_id=identidade).first()
+        if funcionario is not None or not email:
+            return funcionario
+
+        # Migração transparente de perfis legados (supabaseUserId ainda nulo).
+        funcionario = self.filter(
+            email__iexact=email.strip(),
+            supabase_user_id__isnull=True,
+        ).first()
+        if funcionario is not None:
+            funcionario.supabase_user_id = identidade
+            funcionario.save(update_fields=['supabase_user_id'])
+
+        return funcionario
 
 
 class Funcionario(AbstractBaseUser, PermissionsMixin):
     """
-    Entidade Funcionario conforme especificada no Documento de Modelos:
+    Perfil funcional do Funcionário, associado 1:1 a uma identidade do Supabase Auth:
     - idFuncionario: SERIAL PK / Identity
+    - supabaseUserId: UUID único da identidade em auth.users (Supabase Auth)
     - nome: VARCHAR(150) Not Null
-    - email: VARCHAR(150) Unique / Not Null
-    - senha: VARCHAR(255) Not Null (criptografada)
+    - email: VARCHAR(150) Unique / Not Null (e-mail de exibição/contato)
     - isAdmin: BOOLEAN Not Null (define nível de acesso Administrador vs Funcionário)
+
+    Senha e hash de senha NÃO pertencem a este modelo nem à tabela FUNCIONARIO:
+    são gerenciados exclusivamente pelo Supabase Auth.
     """
+
+    # Remove o campo `password` herdado de AbstractBaseUser (e a coluna `senha`).
+    password = None
 
     idFuncionario = models.AutoField(
         primary_key=True,
         db_column='idFuncionario',
         verbose_name='ID do Funcionário',
+    )
+    supabase_user_id = models.UUIDField(
+        unique=True,
+        null=True,
+        blank=True,
+        db_column='supabaseUserId',
+        verbose_name='ID do Usuário no Supabase Auth',
+        help_text='Identificador único da identidade autenticada em auth.users.',
     )
     nome = models.CharField(
         max_length=150,
@@ -80,11 +143,6 @@ class Funcionario(AbstractBaseUser, PermissionsMixin):
         unique=True,
         db_column='email',
         verbose_name='E-mail',
-    )
-    password = models.CharField(
-        max_length=255,
-        db_column='senha',
-        verbose_name='Senha Criptografada',
     )
     isAdmin = models.BooleanField(
         default=False,
@@ -116,15 +174,11 @@ class Funcionario(AbstractBaseUser, PermissionsMixin):
         return f'{self.nome} ({self.email}) - {perfil}'
 
     def save(self, *args, **kwargs):
-        # Sincroniza flags do Django com isAdmin do modelo conceitual
-        self.is_staff = bool(self.isAdmin)
-        self.is_superuser = bool(self.isAdmin)
+        # Mantém as flags internas do Django coerentes com o nível de acesso.
+        if not kwargs.get('update_fields'):
+            self.is_staff = bool(self.isAdmin)
+            self.is_superuser = bool(self.isAdmin)
         super().save(*args, **kwargs)
-
-    @property
-    def senha(self) -> str:
-        """Alias para compatibilidade direta com o diagrama de classes (atributo senha)."""
-        return self.password
 
     @property
     def perfil(self) -> str:
@@ -132,23 +186,30 @@ class Funcionario(AbstractBaseUser, PermissionsMixin):
         return 'Administrador' if self.isAdmin else 'Funcionário'
 
     # Métodos do Diagrama de Classes (doc-modelos.md)
-    def solicitarAutorizacaoAcesso(self, senha_texto: str) -> bool:
+    def solicitarAutorizacaoAcesso(self) -> bool:
         """
-        Valida as credenciais do funcionário e verifica se está autorizado a acessar o sistema.
+        Indica se o perfil pode acessar o sistema.
+
+        A verificação de credenciais (e-mail/senha) é responsabilidade exclusiva
+        do Supabase Auth; aqui validamos apenas o vínculo de identidade e o status.
         Corresponde ao método +solicitarAutorizacaoAcesso(): boolean do Modelo Conceitual.
         """
-        return bool(self.is_active and self.check_password(senha_texto))
+        return bool(self.is_active and self.supabase_user_id)
 
     def manterFuncionario(
         self,
         nome: str = None,
         email: str = None,
-        senha: str = None,
         isAdmin: bool = None,
+        is_active: bool = None,
     ) -> 'Funcionario':
         """
-        Atualiza os atributos do funcionário mantendo a senha criptografada.
-        Corresponde ao método +manterFuncionario(funcionario: Funcionario): void do Modelo Conceitual.
+        Atualiza os dados do perfil funcional do funcionário.
+
+        Não altera credenciais: e-mail de login e senha são gerenciados pelo
+        Supabase Auth.
+        Corresponde ao método +manterFuncionario(funcionario: Funcionario): void
+        do Modelo Conceitual.
         """
         if nome is not None:
             self.nome = nome
@@ -156,7 +217,7 @@ class Funcionario(AbstractBaseUser, PermissionsMixin):
             self.email = self.__class__.objects.normalize_email(email)
         if isAdmin is not None:
             self.isAdmin = isAdmin
-        if senha:
-            self.set_password(senha)
+        if is_active is not None:
+            self.is_active = is_active
         self.save()
         return self

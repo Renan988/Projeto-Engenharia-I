@@ -1,12 +1,15 @@
 """
 Autenticação exclusiva via Supabase Auth para o Django REST Framework.
 
-Atende aos critérios de aceite da Issue #13:
-- Valida tokens emitidos pelo Supabase e rejeita tokens inválidos, expirados ou de outro projeto (401).
-- Obtém a identidade autenticada exclusivamente a partir do token validado.
-- Identifica o Funcionário associado já cadastrado no banco; rejeita usuários sem perfil associado (401).
-- As permissões de Administrador (isAdmin) vêm estritamente do perfil persistido no backend,
-  jamais confiando em metadados ou papéis enviados pelo cliente.
+Atende aos critérios de aceite da Issue #19:
+- Valida tokens emitidos pelo Supabase e rejeita tokens inválidos, expirados ou
+  de outro projeto (401).
+- Resolve a identidade autenticada (`sub`) para o perfil de Funcionário vinculado
+  por `supabaseUserId`, sem armazenar ou comparar senhas no backend.
+- Perfis legados ainda sem vínculo são associados uma única vez pelo e-mail do
+  token já validado (fluxo de migração documentado em backend/README.md).
+- As permissões de Administrador (isAdmin) vêm estritamente do perfil persistido
+  no backend, jamais de metadados ou papéis enviados pelo cliente.
 - Retorna 401 Unauthorized (via authenticate_header) quando não há autenticação válida.
 """
 
@@ -50,17 +53,23 @@ class SupabaseJWTAuthentication(BaseAuthentication):
         except SupabaseTokenError as exc:
             raise AuthenticationFailed(str(exc)) from exc
 
-        email = (dados_token.get('email') or '').strip().lower()
-        if not email:
-            raise AuthenticationFailed('O token do Supabase não contém um e-mail válido.')
+        identidade_supabase = dados_token.get('id')
+        if not identidade_supabase:
+            raise AuthenticationFailed(
+                'O token do Supabase não contém um identificador de usuário válido.'
+            )
 
-        # Busca o perfil de Funcionário persistido no backend (não cria nem confia em roles do cliente)
-        try:
-            funcionario = Funcionario.objects.get(email__iexact=email)
-        except Funcionario.DoesNotExist as exc:
+        email = (dados_token.get('email') or '').strip().lower()
+
+        # Resolve a identidade autenticada para o perfil funcional persistido no backend.
+        funcionario = Funcionario.objects.resolver_por_identidade_supabase(
+            identidade_supabase,
+            email=email,
+        )
+        if funcionario is None:
             raise AuthenticationFailed(
                 'Usuário autenticado no Supabase não possui perfil de funcionário associado no sistema.'
-            ) from exc
+            )
 
         if not funcionario.is_active:
             raise AuthenticationFailed('Perfil de funcionário inativo.')

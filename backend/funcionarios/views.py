@@ -14,7 +14,11 @@ from auditoria.models import LogRastreabilidade
 
 from .models import Funcionario
 from .permissions import IsAdminFuncionario
-from .serializers import FuncionarioSerializer, LoginSerializer
+from .serializers import (
+    FuncionarioCreateSerializer,
+    FuncionarioSerializer,
+    LoginSerializer,
+)
 
 
 class FuncionarioFilter(django_filters.FilterSet):
@@ -44,6 +48,12 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
     filterset_class = FuncionarioFilter
     search_fields = ['nome', 'email']
     ordering_fields = ['idFuncionario', 'nome', 'email']
+
+    def get_serializer_class(self):
+        # A senha só é aceita na criação e é encaminhada ao Supabase Auth.
+        if self.action == 'create':
+            return FuncionarioCreateSerializer
+        return FuncionarioSerializer
 
     def perform_create(self, serializer):
         novo_func = serializer.save()
