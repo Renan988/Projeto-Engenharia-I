@@ -1,11 +1,12 @@
 """
 Configurações do Django para o Sistema de Controle de Fluxo (Workflow) de SPEDs - Intech Sistemas.
-Construído a partir do Documento de Visão (doc-visao.md) e Documento de Modelos (doc-modelos.md).
+Integrado com Supabase (Banco de Dados PostgreSQL + Autenticação exclusiva via Supabase Auth).
 """
 
 import os
-from datetime import timedelta
+import socket
 from pathlib import Path
+from urllib.parse import urlparse
 
 import dj_database_url
 from dotenv import load_dotenv
@@ -38,7 +39,6 @@ INSTALLED_APPS = [
     # Bibliotecas de terceiros
     'corsheaders',
     'rest_framework',
-    'rest_framework_simplejwt',
     'django_filters',
     'drf_spectacular',
     # Apps do domínio do projeto
@@ -79,13 +79,51 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# Banco de Dados: Suporta Supabase (PostgreSQL via DATABASE_URL) e SQLite local
-DATABASES = {
-    'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
-    )
-}
+# ==============================================================================
+# BANCO DE DADOS E SUPABASE (PostgreSQL na nuvem + Autenticação via Supabase Auth)
+# ==============================================================================
+DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
+IS_POSTGRES = DATABASE_URL.startswith(('postgres://', 'postgresql://'))
+
+
+def _porta_postgres_acessivel(db_url: str) -> bool:
+    """
+    Verifica rapidamente (1.5s) se a rede atual permite saída na porta 5432/6543.
+    """
+    try:
+        parsed = urlparse(db_url)
+        host = parsed.hostname
+        port = parsed.port or 5432
+        if not host or '[' in db_url:
+            return False
+        with socket.create_connection((host, port), timeout=1.5):
+            return True
+    except OSError:
+        return False
+
+
+if IS_POSTGRES and _porta_postgres_acessivel(DATABASE_URL):
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=0 if ':6543/' in DATABASE_URL else 600,
+            ssl_require='supabase.co' in DATABASE_URL,
+        )
+    }
+    DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 5
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+# Credenciais do Supabase Auth / API (A service_role permanece estritamente no backend)
+SUPABASE_URL = os.getenv('SUPABASE_URL', '').strip()
+SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '').strip()
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '').strip()
+SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET', '').strip()
 
 # Modelo customizado de Usuário / Funcionário (US01 / Tabela FUNCIONARIO)
 AUTH_USER_MODEL = 'funcionarios.Funcionario'
@@ -120,11 +158,11 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Configuração do Django REST Framework
+# Configuração do Django REST Framework:
+# Autenticação única e exclusiva via Supabase Auth (sem emissão/renovação legada de JWT pelo Django)
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+        'funcionarios.authentication.SupabaseJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -137,22 +175,12 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# Configuração do JWT (RF01.05 - Login do Usuário)
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'USER_ID_FIELD': 'idFuncionario',
-    'USER_ID_CLAIM': 'idFuncionario',
-}
-
 # Documentação OpenAPI / Swagger
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Intech Sistemas - API de Controle de Fluxo de SPEDs',
     'DESCRIPTION': (
         'Sistema de controle de fluxo (workflow) para automatizar e organizar '
-        'o processo de geração mensal de SPEDs da Intech Sistemas.'
+        'o processo de geração mensal de SPEDs da Intech Sistemas (Django + Supabase Auth).'
     ),
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,

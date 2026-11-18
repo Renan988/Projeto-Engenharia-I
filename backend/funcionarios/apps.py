@@ -5,3 +5,6 @@ class FuncionariosConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'funcionarios'
     verbose_name = 'Funcionários (Usuários)'
+
+    def ready(self):
+        import config.supabase_sync  # noqa: F401

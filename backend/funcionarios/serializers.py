@@ -1,9 +1,11 @@
 """
-Serializers para a entidade Funcionario e Autenticação (US01 - RF01.01 a RF01.05).
+Serializers para a entidade Funcionario (US01 - RF01.01 a RF01.05).
+Integrado exclusivamente ao Supabase Auth (sem emissão local de JWT pelo Django).
 """
 
 from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
+
+from config.supabase_client import SupabaseClient
 
 from .models import Funcionario
 
@@ -14,9 +16,9 @@ class FuncionarioSerializer(serializers.ModelSerializer):
     senha = serializers.CharField(
         write_only=True,
         required=False,
-        min_length=4,
+        min_length=6,
         style={'input_type': 'password'},
-        help_text='Senha de acesso do funcionário (armazenada de forma criptografada).',
+        help_text='Senha de acesso do funcionário (criada no Supabase Auth).',
     )
     perfil = serializers.CharField(read_only=True)
 
@@ -43,6 +45,13 @@ class FuncionarioSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         senha = validated_data.pop('senha')
+        if SupabaseClient.is_configured():
+            SupabaseClient.create_auth_user(
+                email=validated_data['email'],
+                password=senha,
+                nome=validated_data['nome'],
+                is_admin=validated_data.get('isAdmin', False),
+            )
         return Funcionario.objects.create_user(senha=senha, **validated_data)
 
     def update(self, instance: Funcionario, validated_data):
@@ -56,7 +65,11 @@ class FuncionarioSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    """Serializer para o endpoint de Login (RF01.05 - Login do Usuário)."""
+    """
+    Serializer de autenticação via Supabase Auth (RF01.05).
+    Não emite JWT local pelo Django: delega a autenticação ao Supabase Auth
+    e exige que o funcionário possua perfil associado persistido no backend.
+    """
 
     email = serializers.EmailField(required=True)
     senha = serializers.CharField(
@@ -70,19 +83,26 @@ class LoginSerializer(serializers.Serializer):
         senha = attrs.get('senha', '')
 
         try:
+            dados_supabase = SupabaseClient.sign_in_with_password(email=email, password=senha)
+        except ValueError as exc:
+            raise serializers.ValidationError({'detail': str(exc)})
+
+        try:
             funcionario = Funcionario.objects.get(email__iexact=email)
         except Funcionario.DoesNotExist:
             raise serializers.ValidationError(
-                {'detail': 'Credenciais inválidas. Verifique seu e-mail e senha.'}
+                {
+                    'detail': (
+                        'Usuário autenticado no Supabase não possui perfil de funcionário '
+                        'associado no sistema.'
+                    )
+                }
             )
 
-        if not funcionario.solicitarAutorizacaoAcesso(senha):
-            raise serializers.ValidationError(
-                {'detail': 'Credenciais inválidas ou usuário inativo.'}
-            )
+        if not funcionario.is_active:
+            raise serializers.ValidationError({'detail': 'Perfil de funcionário inativo.'})
 
-        refresh = RefreshToken.for_user(funcionario)
         attrs['funcionario'] = funcionario
-        attrs['access'] = str(refresh.access_token)
-        attrs['refresh'] = str(refresh)
+        attrs['access'] = dados_supabase.get('access_token')
+        attrs['refresh'] = dados_supabase.get('refresh_token')
         return attrs
