@@ -58,13 +58,13 @@ Funcionário (Usuário) | Este usuário, após autenticado, acessa a fila de ate
 ## Lista de Requisitos Funcionais
 
 ### Entidade Usuário - US01 - Manter Usuário
-Um usuário representa um colaborador da Intech Sistemas. Ele tem: nome, e-mail, senha e nível de acesso (Funcionário ou Administrador).
+Um usuário representa um colaborador da Intech Sistemas. Ele tem: nome, e-mail, nível de acesso (Funcionário ou Administrador) e vínculo com uma identidade do Supabase Auth. A senha é gerenciada exclusivamente pelo Supabase Auth e não é armazenada no backend.
 
 Requisito                     | Descrição   | Ator |
 ---------                     | ----------- | ---------- |
-RF01.01 - Inserir Usuário      | Insere novo usuário informando: nome, e-mail, senha e nível de acesso. | Administrador |
+RF01.01 - Inserir Usuário      | Insere novo usuário informando: nome, e-mail, senha (criada no Supabase Auth) e nível de acesso. | Administrador |
 RF01.02 - Listar Usuários      | Listagem de usuários utilizando filtros nos atributos: nome e e-mail. | Administrador |
-RF01.03 - Atualizar Usuário    | Atualiza um usuário informando: nome, e-mail, senha e nível de acesso. | Administrador |
+RF01.03 - Atualizar Usuário    | Atualiza um usuário informando: nome, e-mail e nível de acesso. A senha é alterada diretamente no Supabase Auth. | Administrador |
 RF01.04 - Deletar Usuário      | Deleta um usuário informando o e-mail. | Administrador |
 RF01.05 - Login do Usuário     | Realiza login informando e-mail e senha; o sistema valida as credenciais em até 5 segundos e libera o acesso conforme o perfil. | Usuário |
 
@@ -138,9 +138,9 @@ erDiagram
 
     FUNCIONARIO {
         int idFuncionario PK
+        uuid supabaseUserId "Único - id em auth.users (Supabase Auth)"
         string nome
         string email
-        string senha
         boolean isAdmin
     }
 
@@ -175,7 +175,7 @@ erDiagram
 
 | Entidade | Descrição |
 |----------|-----------|
-| Funcionario | Entidade que representa um Funcionário tem as informações: Int idFuncionario, String nome, String email, String senha, Boolean isAdmin, +solicitarAutorizacaoAcesso(), +manterFuncionario(). |
+| Funcionario | Entidade que representa o perfil funcional de um Funcionário e tem as informações: Int idFuncionario, UUID supabaseUserId, String nome, String email, Boolean isAdmin, +solicitarAutorizacaoAcesso(), +manterFuncionario(). A identidade e a senha pertencem ao Supabase Auth. |
 | LogRastreabilidade | Entidade que representa o log do sistema tem as informações: Int idLog, Date dataHora, String acaoRealizada, +registrarLog(), +gerarDashboard(). |
 | Cliente | Entidade que representa um Cliente tem as informações: Int idCli, String cnpj, String razaoSocial, String telefoneWhatsApp, String emailContador, String regimeTributario, +consultarRegimeAPI(), +manterCliente(). |
 | Sped | Entidade que representa um registro SPED tem as informações: Int idSped, String mesReferencia, Int status, File arquivoRar, +atualizarStatus(), +realizarUpload(), +enviarEmailContador(), +marcarSped(), +enviarSped(). |

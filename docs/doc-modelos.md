@@ -10,13 +10,14 @@ Neste documento temos o modelo Conceitual (UML) ou de Dados (Entidade-Relacionam
 classDiagram
     class Funcionario {
         -Int idFuncionario
+        -UUID supabaseUserId
         -String nome
         -String email
-        -String senha
         -Boolean isAdmin
         +solicitarAutorizacaoAcesso() boolean
         +manterFuncionario(funcionario: Funcionario) void
     }
+    note for Funcionario "Autenticação e senha são gerenciadas pelo Supabase Auth (auth.users)."
     
     class LogRastreabilidade {
         -Int idLog
@@ -63,7 +64,7 @@ Descrição sucinta das entidades presentes no sistema.
 
 | Entidade | Descrição |
 |----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Funcionario | Entidade que representa um Funcionário tem as informações: Int idFuncionario, String nome, String email, String senha, Boolean isAdmin, +solicitarAutorizacaoAcesso(), +manterFuncionario(). |
+| Funcionario | Entidade que representa o perfil funcional de um Funcionário e tem as informações: Int idFuncionario, UUID supabaseUserId, String nome, String email, Boolean isAdmin, +solicitarAutorizacaoAcesso(), +manterFuncionario(). A identidade e a senha pertencem ao Supabase Auth (auth.users). |
 | LogRastreabilidade | Entidade que representa o log do sistema tem as informações: Int idLog, Date dataHora, String acaoRealizada, +registrarLog(), +gerarDashboard(). |
 | Cliente | Entidade que representa um Cliente tem as informações: Int idCli, String cnpj, String razaoSocial, String telefoneWhatsApp, String emailContador, String regimeTributario, +consultarRegimeAPI(), +manterCliente(). |
 | Sped | Entidade que representa um registro SPED tem as informações: Int idSped, String mesReferencia, Int status, File arquivoRar, +atualizarStatus(), +realizarUpload(), +enviarEmailContador(), +marcarSped(), +enviarSped(). |
@@ -78,9 +79,9 @@ erDiagram
 
     FUNCIONARIO {
         int idFuncionario PK
+        uuid supabaseUserId "Único - id em auth.users (Supabase Auth)"
         string nome
         string email
-        string senha
         boolean isAdmin
     }
 
@@ -115,15 +116,15 @@ erDiagram
 
 | Tabela | FUNCIONARIO |
 | --- | --- |
-| Descrição | Armazena as informações dos funcionários que utilizam e administram o sistema. |
-| Observação | O campo `isAdmin` define se o funcionário possui privilégios de administrador. |
+| Descrição | Armazena o perfil funcional dos funcionários que utilizam e administram o sistema. |
+| Observação | Autenticação, e-mail de login e senha são gerenciados exclusivamente pelo Supabase Auth (`auth.users`). A tabela não armazena senha nem hash. O campo `isAdmin` define se o funcionário possui privilégios de administrador. |
 
 | Nome | Descrição | Tipo de Dado | Tamanho | Restrições de Domínio |
 | --- | --- | --- | --- | --- |
 | idFuncionario | identificador gerado pelo SGBD | SERIAL | --- | PK / Identity |
+| supabaseUserId | identificador único da identidade no Supabase Auth | UUID | --- | Unique / Nullable (até o vínculo) / FK lógica para `auth.users.id` |
 | nome | nome completo do funcionário | VARCHAR | 150 | Not Null |
-| email | e-mail de acesso do funcionário | VARCHAR | 150 | Unique / Not Null |
-| senha | senha criptografada de acesso | VARCHAR | 255 | Not Null |
+| email | e-mail de exibição/contato do funcionário | VARCHAR | 150 | Unique / Not Null |
 | isAdmin | flag de privilégio administrador | BOOLEAN | --- | Not Null |
 
 | Tabela | LOG_RASTREABILIDADE |

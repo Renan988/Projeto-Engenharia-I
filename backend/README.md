@@ -27,9 +27,33 @@ O back-end utiliza o **Supabase** tanto como banco de dados PostgreSQL na nuvem 
    ```
 
 ### Como funciona o Login com o Supabase Auth:
-- **Pelo Front-end (React):** O front-end pode usar o SDK do Supabase (`@supabase/supabase-js`) para fazer login e enviar o `access_token` no cabeçalho `Authorization: Bearer <token>`. A classe [`SupabaseJWTAuthentication`](funcionarios/authentication.py) valida o token do Supabase e sincroniza automaticamente o usuário com a tabela `FUNCIONARIO`.
+- **Pelo Front-end (React):** O front-end pode usar o SDK do Supabase (`@supabase/supabase-js`) para fazer login e enviar o `access_token` no cabeçalho `Authorization: Bearer <token>`. A classe [`SupabaseJWTAuthentication`](funcionarios/authentication.py) valida o token e resolve a identidade autenticada (`sub`) para o perfil de `FUNCIONARIO` vinculado por `supabaseUserId`.
 - **Pelo Back-end (`/api/funcionarios/login/`):** O endpoint de login do Django autentica diretamente no **Supabase Auth** via [`SupabaseClient.sign_in_with_password()`](config/supabase_client.py) e retorna os tokens do Supabase + dados do perfil (`Administrador` ou `Funcionário`).
-- **Cadastro de Usuários (`POST /api/funcionarios/`):** Ao cadastrar um colaborador pelo sistema, ele também é criado automaticamente no **Supabase Auth** via [`SupabaseClient.create_auth_user()`](config/supabase_client.py).
+- **Cadastro de Usuários (`POST /api/funcionarios/`):** Ao cadastrar um colaborador, a identidade (e-mail/senha) é criada no **Supabase Auth** via [`SupabaseClient.create_auth_user()`](config/supabase_client.py). O backend persiste apenas o perfil funcional e o identificador retornado pelo Supabase. Por isso, `SUPABASE_URL`, `SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` precisam estar configurados para o cadastro.
+- **Django Admin:** a rota `/admin/` não é exposta. Toda autenticação é feita pelo Supabase Auth; a administração de usuários ocorre pela API (`/api/funcionarios/`) e a gestão de credenciais pelo painel do Supabase.
+
+### Modelo de Funcionário e credenciais (Issue #19)
+- A tabela `FUNCIONARIO` mantém apenas os campos de negócio: `idFuncionario`, `supabaseUserId`, `nome`, `email`, `isAdmin` e `is_active`.
+- `supabaseUserId` é **único** e corresponde ao `id` da identidade em `auth.users` (Supabase Auth).
+- **Senha e hash de senha não são armazenados nem retornados** pela tabela ou pela API de funcionários.
+- Na criação, o campo `senha` é aceito apenas como *write-only*, é encaminhado ao Supabase Auth e nunca é gravado no backend.
+- A autenticação resolve o token validado (`sub`) para o perfil vinculado, sem comparar senhas no Django.
+
+### Migração de usuários existentes (sem expor senhas)
+Bancos criados antes da Issue #19 ainda possuem a coluna `senha` e não têm `supabaseUserId`:
+
+1. Aplique a migração do Django (funciona em banco limpo e existente):
+   ```bash
+   cd backend
+   python manage.py migrate
+   # 0002_supabase_user_id_remove_password: remove a coluna "senha" e adiciona "supabaseUserId"
+   ```
+2. Para bancos gerenciados apenas pelo SQL Editor do Supabase, execute o bloco idempotente de migração em [`supabase_schema.sql`](supabase_schema.sql), que remove `senha` e cria o vínculo único.
+3. **Recriação/invitação das credenciais:** os hashes antigos são descartados. Cada funcionário deve ter (ou receber) uma identidade no **Supabase Auth** com o mesmo e-mail do perfil. Nenhuma senha antiga é exportada, lida ou registrada nesse processo.
+4. **Vínculo automático no primeiro login:** ao autenticar, se o perfil ainda estiver com `supabaseUserId` nulo e o e-mail do token validado coincidir, o backend grava o vínculo uma única vez. Depois disso, a resolução passa a ser exclusivamente pelo `supabaseUserId`.
+5. Se preferir vincular antecipadamente, crie os usuários no painel do Supabase Auth (ou via Admin API) com o e-mail do perfil. O gatilho de [`supabase_schema.sql`](supabase_schema.sql) também preenche o vínculo para novos usuários de Auth.
+
+> Observação: como as credenciais deixam de existir no Django, não há `createsuperuser` com senha local. O primeiro administrador deve ser criado no Supabase Auth e ter um perfil com `isAdmin=True` (via API autenticada ou SQL).
 
 ## Estrutura de Pastas do Backend
 
@@ -53,7 +77,7 @@ backend/
 | Módulo / História de Usuário | Método e Rota | Requisito Funcional |
 | :--- | :--- | :--- |
 | **Autenticação (Supabase)** | `POST /api/funcionarios/login/` | RF01.05 - Login do Usuário via Supabase Auth |
-| **Perfil Atual** | `GET /api/funcionarios/me/` | Retorna usuário autenticado (Token Supabase ou JWT) |
+| **Perfil Atual** | `GET /api/funcionarios/me/` | Retorna o perfil do usuário autenticado (Token Supabase) |
 | **Usuários (Admin)** | `GET/POST /api/funcionarios/` | RF01.01, RF01.02 - Inserir (no Supabase + Banco) e Listar |
 | **Usuários (Admin)** | `PUT/PATCH/DELETE /api/funcionarios/{id}/` | RF01.03, RF01.04 - Atualizar e Deletar Usuário |
 | **Usuários (Admin)** | `DELETE /api/funcionarios/deletar-por-email/?email=...` | RF01.04 - Deletar Usuário por E-mail |
