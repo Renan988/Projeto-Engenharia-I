@@ -1,5 +1,6 @@
 """
 Views e ViewSets para gerenciamento de Funcionários (US01 - RF01.01 a RF01.05).
+Autenticação e autorização baseadas no token do Supabase Auth e no perfil persistido no banco.
 """
 
 import django_filters
@@ -112,15 +113,18 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
         url_path='me',
     )
     def me(self, request):
-        """Retorna os dados do funcionário atualmente autenticado."""
+        """
+        Retorna os dados do funcionário autenticado a partir do token validado do Supabase.
+        """
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
 
 class LoginAPIView(APIView):
     """
-    Endpoint de autenticação de Funcionários (RF01.05 - Login do Usuário).
-    Valida e-mail e senha e retorna tokens JWT e perfil de acesso (Administrador ou Funcionário).
+    Endpoint auxiliar de login via Supabase Auth (RF01.05).
+    Nota: O frontend também pode autenticar diretamente pelo SDK @supabase/supabase-js
+    e enviar o access_token no cabeçalho Authorization: Bearer <token>.
     """
 
     permission_classes = [AllowAny]
@@ -132,12 +136,13 @@ class LoginAPIView(APIView):
 
         funcionario: Funcionario = serializer.validated_data['funcionario']
         LogRastreabilidade.registrarLog(
-            acao=f'Realizou login no sistema ({funcionario.perfil})',
+            acao=f'Realizou login no sistema via Supabase Auth ({funcionario.perfil})',
             funcionario=funcionario,
         )
 
         return Response(
             {
+                'provedor_auth': 'supabase',
                 'access': serializer.validated_data['access'],
                 'refresh': serializer.validated_data['refresh'],
                 'usuario': FuncionarioSerializer(funcionario).data,

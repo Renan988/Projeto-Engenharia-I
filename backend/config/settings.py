@@ -1,11 +1,10 @@
 """
 Configurações do Django para o Sistema de Controle de Fluxo (Workflow) de SPEDs - Intech Sistemas.
-Integrado com Supabase (Banco de Dados PostgreSQL + Supabase Auth).
+Integrado com Supabase (Banco de Dados PostgreSQL + Autenticação exclusiva via Supabase Auth).
 """
 
 import os
 import socket
-from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -40,7 +39,6 @@ INSTALLED_APPS = [
     # Bibliotecas de terceiros
     'corsheaders',
     'rest_framework',
-    'rest_framework_simplejwt',
     'django_filters',
     'drf_spectacular',
     # Apps do domínio do projeto
@@ -82,7 +80,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # ==============================================================================
-# BANCO DE DADOS E SUPABASE (PostgreSQL na nuvem + Autenticação via HTTPS 443)
+# BANCO DE DADOS E SUPABASE (PostgreSQL na nuvem + Autenticação via Supabase Auth)
 # ==============================================================================
 DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 IS_POSTGRES = DATABASE_URL.startswith(('postgres://', 'postgresql://'))
@@ -91,8 +89,6 @@ IS_POSTGRES = DATABASE_URL.startswith(('postgres://', 'postgresql://'))
 def _porta_postgres_acessivel(db_url: str) -> bool:
     """
     Verifica rapidamente (1.5s) se a rede atual permite saída na porta 5432/6543.
-    Redes públicas/universitárias (como eduroam) frequentemente bloqueiam a porta 5432,
-    permitindo apenas a porta 443 (HTTPS - usada pela API do Supabase Auth/REST).
     """
     try:
         parsed = urlparse(db_url)
@@ -116,8 +112,6 @@ if IS_POSTGRES and _porta_postgres_acessivel(DATABASE_URL):
     }
     DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 5
 else:
-    # Caso a porta 5432 esteja bloqueada pelo firewall da rede Wi-Fi atual,
-    # mantém cache local operacional enquanto usa o Supabase Auth e REST via porta 443 (HTTPS)
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -125,7 +119,7 @@ else:
         }
     }
 
-# Credenciais do Supabase Auth / API (Operam via HTTPS porta 443, nunca bloqueada)
+# Credenciais do Supabase Auth / API (A service_role permanece estritamente no backend)
 SUPABASE_URL = os.getenv('SUPABASE_URL', '').strip()
 SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', '').strip()
 SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '').strip()
@@ -164,12 +158,11 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Configuração do Django REST Framework (Suporta Tokens do Supabase Auth e SimpleJWT)
+# Configuração do Django REST Framework:
+# Autenticação única e exclusiva via Supabase Auth (sem emissão/renovação legada de JWT pelo Django)
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'funcionarios.authentication.SupabaseJWTAuthentication',
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
@@ -182,22 +175,12 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# Configuração do JWT (RF01.05 - Login do Usuário)
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'USER_ID_FIELD': 'idFuncionario',
-    'USER_ID_CLAIM': 'idFuncionario',
-}
-
 # Documentação OpenAPI / Swagger
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Intech Sistemas - API de Controle de Fluxo de SPEDs',
     'DESCRIPTION': (
         'Sistema de controle de fluxo (workflow) para automatizar e organizar '
-        'o processo de geração mensal de SPEDs da Intech Sistemas (Django + Supabase).'
+        'o processo de geração mensal de SPEDs da Intech Sistemas (Django + Supabase Auth).'
     ),
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
