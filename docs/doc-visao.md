@@ -165,9 +165,9 @@ erDiagram
     SPED {
         int idSped PK
         string mesReferencia
-        id status "PENDENTE, GERADO, ENVIADO"
+        int status "PENDENTE, GERADO, ENVIADO"
         string arquivoRar
-        string idCli FK
+        int idCli FK
     }
 ```
 
