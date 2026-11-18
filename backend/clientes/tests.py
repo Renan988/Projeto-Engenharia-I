@@ -1,5 +1,6 @@
 """Testes automatizados para US02 - Manter Cliente (RF02.01 a RF02.04)."""
 
+import uuid
 from unittest.mock import patch
 
 from rest_framework import status
@@ -15,7 +16,7 @@ class ClienteUS02Tests(APITestCase):
         self.funcionario = Funcionario.objects.create_user(
             email='func@intech.com.br',
             nome='Funcionário Teste',
-            senha='senha123',
+            supabase_user_id=uuid.uuid4(),
             isAdmin=False,
         )
         self.client.force_authenticate(user=self.funcionario)
