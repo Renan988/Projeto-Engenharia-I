@@ -126,22 +126,8 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '').strip()
 SUPABASE_JWT_SECRET = os.getenv('SUPABASE_JWT_SECRET', '').strip()
 
 # Modelo customizado de Usuário / Funcionário (US01 / Tabela FUNCIONARIO)
+# O modelo não possui senha: identidade e credenciais pertencem ao Supabase Auth.
 AUTH_USER_MODEL = 'funcionarios.Funcionario'
-
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
 
 # Internacionalização
 LANGUAGE_CODE = 'pt-br'

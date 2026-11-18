@@ -4,7 +4,6 @@ Configuração de rotas principais (URLs) da API do Sistema de Controle de Fluxo
 
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 from drf_spectacular.views import (
@@ -38,7 +37,8 @@ def api_root(request):
 
 urlpatterns = [
     path('', api_root, name='api-root'),
-    path('admin/', admin.site.urls),
+    # O Django Admin não é exposto: autenticação e gestão de identidade/senha
+    # são realizadas exclusivamente pelo Supabase Auth (Issue #19).
     # Documentação OpenAPI / Swagger
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path(

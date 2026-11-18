@@ -36,15 +36,17 @@ def sync_funcionario_save(sender, instance: Funcionario, **kwargs):
         table_name='FUNCIONARIO',
         payload={
             'idFuncionario': instance.idFuncionario,
+            'supabaseUserId': (
+                str(instance.supabase_user_id) if instance.supabase_user_id else None
+            ),
             'nome': instance.nome,
             'email': instance.email,
-            'senha': instance.password,
             'isAdmin': instance.isAdmin,
             'is_active': instance.is_active,
             'is_staff': instance.is_staff,
             'is_superuser': instance.is_superuser,
         },
-        on_conflict='email',
+        on_conflict='idFuncionario',
     )
 
 
