@@ -1,6 +1,12 @@
 """
 Serializers para a entidade Funcionario (US01 - RF01.01 a RF01.05).
-Integrado exclusivamente ao Supabase Auth (sem emissão local de JWT pelo Django).
+
+A partir da Issue #19, o backend persiste apenas o perfil funcional. Identidade,
+e-mail de login e senha pertencem ao Supabase Auth:
+- Nenhuma resposta da API expõe senha ou hash.
+- Na criação, a senha é somente de escrita e encaminhada ao Supabase Auth,
+  que devolve o identificador vinculado ao perfil (`supabaseUserId`).
+- Atualizações de perfil não alteram credenciais.
 """
 
 from rest_framework import serializers
@@ -11,64 +17,83 @@ from .models import Funcionario
 
 
 class FuncionarioSerializer(serializers.ModelSerializer):
-    """Serializer completo para leitura, criação e atualização de Funcionários."""
+    """Serializer do perfil funcional para leitura e atualização."""
 
-    senha = serializers.CharField(
-        write_only=True,
-        required=False,
-        min_length=6,
-        style={'input_type': 'password'},
-        help_text='Senha de acesso do funcionário (criada no Supabase Auth).',
-    )
     perfil = serializers.CharField(read_only=True)
 
     class Meta:
         model = Funcionario
         fields = [
             'idFuncionario',
+            'supabase_user_id',
             'nome',
             'email',
-            'senha',
             'isAdmin',
             'perfil',
             'is_active',
         ]
-        read_only_fields = ['idFuncionario', 'perfil']
+        read_only_fields = ['idFuncionario', 'supabase_user_id', 'perfil']
 
-    def validate(self, attrs):
-        # Na criação (RF01.01), a senha é obrigatória
-        if self.instance is None and not attrs.get('senha'):
-            raise serializers.ValidationError(
-                {'senha': 'A senha é obrigatória para cadastrar um novo usuário.'}
-            )
-        return attrs
+    def update(self, instance: Funcionario, validated_data):
+        return instance.manterFuncionario(
+            nome=validated_data.get('nome'),
+            email=validated_data.get('email'),
+            isAdmin=validated_data.get('isAdmin'),
+            is_active=validated_data.get('is_active'),
+        )
+
+
+class FuncionarioCreateSerializer(FuncionarioSerializer):
+    """
+    Serializer de criação de perfil (RF01.01).
+
+    A senha é write-only e usada apenas para criar a identidade no Supabase Auth.
+    Ela nunca é gravada na tabela FUNCIONARIO nem retornada pela API.
+    """
+
+    senha = serializers.CharField(
+        write_only=True,
+        required=True,
+        min_length=6,
+        style={'input_type': 'password'},
+        help_text=(
+            'Senha de acesso criada no Supabase Auth. Não é armazenada pelo backend '
+            'e não é retornada pela API.'
+        ),
+    )
+
+    class Meta(FuncionarioSerializer.Meta):
+        fields = FuncionarioSerializer.Meta.fields + ['senha']
 
     def create(self, validated_data):
         senha = validated_data.pop('senha')
-        if SupabaseClient.is_configured():
-            SupabaseClient.create_auth_user(
-                email=validated_data['email'],
-                password=senha,
-                nome=validated_data['nome'],
-                is_admin=validated_data.get('isAdmin', False),
-            )
-        return Funcionario.objects.create_user(senha=senha, **validated_data)
 
-    def update(self, instance: Funcionario, validated_data):
-        senha = validated_data.pop('senha', None)
-        return instance.manterFuncionario(
-            nome=validated_data.get('nome', instance.nome),
-            email=validated_data.get('email', instance.email),
-            senha=senha,
-            isAdmin=validated_data.get('isAdmin', instance.isAdmin),
+        identidade_supabase = SupabaseClient.create_auth_user(
+            email=validated_data['email'],
+            password=senha,
+            nome=validated_data['nome'],
+            is_admin=validated_data.get('isAdmin', False),
         )
+        if not identidade_supabase or not identidade_supabase.get('id'):
+            raise serializers.ValidationError(
+                {
+                    'detail': (
+                        'Não foi possível criar a identidade no Supabase Auth. '
+                        'Verifique se o Supabase está configurado e tente novamente.'
+                    )
+                }
+            )
+
+        validated_data['supabase_user_id'] = identidade_supabase['id']
+        return Funcionario.objects.create_user(**validated_data)
 
 
 class LoginSerializer(serializers.Serializer):
     """
     Serializer de autenticação via Supabase Auth (RF01.05).
-    Não emite JWT local pelo Django: delega a autenticação ao Supabase Auth
-    e exige que o funcionário possua perfil associado persistido no backend.
+
+    Não emite JWT local pelo Django: delega a autenticação ao Supabase Auth e
+    resolve o perfil de funcionário pelo identificador da identidade autenticada.
     """
 
     email = serializers.EmailField(required=True)
@@ -87,9 +112,12 @@ class LoginSerializer(serializers.Serializer):
         except ValueError as exc:
             raise serializers.ValidationError({'detail': str(exc)})
 
-        try:
-            funcionario = Funcionario.objects.get(email__iexact=email)
-        except Funcionario.DoesNotExist:
+        usuario_supabase = dados_supabase.get('user') or {}
+        funcionario = Funcionario.objects.resolver_por_identidade_supabase(
+            usuario_supabase.get('id'),
+            email=usuario_supabase.get('email') or email,
+        )
+        if funcionario is None:
             raise serializers.ValidationError(
                 {
                     'detail': (

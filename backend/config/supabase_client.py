@@ -272,8 +272,11 @@ class SupabaseClient:
                 )
 
             if resp.status_code in (200, 201):
-                return resp.json()
-        except requests.RequestException:
+                dados = resp.json()
+                # O endpoint /signup pode responder {"user": {...}} e o /admin/users
+                # responde o próprio usuário; normaliza para sempre devolver a identidade.
+                return dados.get('user') or dados
+        except (requests.RequestException, ValueError):
             pass
         return None
 
