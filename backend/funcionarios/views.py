@@ -78,6 +78,20 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
             funcionario=self.request.user,
         )
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.pk == request.user.pk:
+            return Response(
+                {'detail': 'Não é permitido excluir o próprio usuário autenticado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        email_removido = instance.email
+        self.perform_destroy(instance)
+        return Response(
+            {'detail': f'Usuário "{email_removido}" deletado com sucesso.'},
+            status=status.HTTP_200_OK,
+        )
+
     @action(
         detail=False,
         methods=['delete', 'post'],

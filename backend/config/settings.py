@@ -102,6 +102,22 @@ def _porta_postgres_acessivel(db_url: str) -> bool:
         return False
 
 
+def _porta_postgres_acessivel(db_url: str) -> bool:
+    """
+    Verifica rapidamente (1.5s) se a rede atual permite saída na porta 5432/6543.
+    """
+    try:
+        parsed = urlparse(db_url)
+        host = parsed.hostname
+        port = parsed.port or 5432
+        if not host or '[' in db_url:
+            return False
+        with socket.create_connection((host, port), timeout=1.5):
+            return True
+    except OSError:
+        return False
+
+
 if IS_POSTGRES and _porta_postgres_acessivel(DATABASE_URL):
     DATABASES = {
         'default': dj_database_url.parse(

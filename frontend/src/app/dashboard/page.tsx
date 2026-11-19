@@ -1,8 +1,10 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { fetchCurrentProfile } from '@/api/client'
 import { logoutAction } from '@/app/actions/auth'
 import { Button } from '@/components/common/Button'
+import { FuncionariosManager } from '@/components/funcionarios/FuncionariosManager'
 import type { FuncionarioProfile } from '@/types/auth'
 
 export default async function DashboardPage() {
@@ -48,13 +50,45 @@ export default async function DashboardPage() {
           justifyContent: 'space-between',
         }}
       >
-        <div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#1f2937' }}>
-            Intech Sistemas
-          </h2>
-          <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>
-            Controle de Fluxo de SPEDs
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#1f2937' }}>
+              Intech Sistemas
+            </h2>
+            <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>
+              Controle de Fluxo de SPEDs
+            </span>
+          </div>
+
+          {profile?.isAdmin && (
+            <nav
+              aria-label="Navegação principal"
+              style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}
+            >
+              <Link
+                href="/dashboard"
+                style={{
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#2563eb',
+                  textDecoration: 'none',
+                }}
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/funcionarios"
+                style={{
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  color: '#4b5563',
+                  textDecoration: 'none',
+                }}
+              >
+                Funcionários
+              </Link>
+            </nav>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -150,34 +184,41 @@ export default async function DashboardPage() {
 
         {/* Seção Administrativa Condicional */}
         {profile?.isAdmin ? (
-          <section
-            style={{
-              backgroundColor: '#eff6ff',
-              borderRadius: '8px',
-              border: '1px solid #bfdbfe',
-              padding: '1.5rem',
-            }}
-          >
-            <h3 style={{ margin: '0 0 0.5rem 0', color: '#1e3a8a', fontSize: '1.125rem' }}>
-              Painel do Administrador
-            </h3>
-            <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', color: '#1e40af' }}>
-              Você tem permissão de Administrador. Os endpoints de gerenciamento de usuários
-              (`GET/POST/PUT/DELETE /api/funcionarios/`) estão disponíveis para sua credencial.
-            </p>
-            <div
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <section
               style={{
-                backgroundColor: '#ffffff',
-                border: '1px solid #dbeafe',
-                borderRadius: '6px',
-                padding: '1rem',
-                fontSize: '0.8125rem',
-                color: '#3b82f6',
+                backgroundColor: '#eff6ff',
+                borderRadius: '8px',
+                border: '1px solid #bfdbfe',
+                padding: '1.5rem',
               }}
             >
-              ✓ Autorização garantida pelo backend via token JWT validado (`SupabaseJWTAuthentication`).
-            </div>
-          </section>
+              <h3 style={{ margin: '0 0 0.5rem 0', color: '#1e3a8a', fontSize: '1.125rem' }}>
+                Painel do Administrador
+              </h3>
+              <p style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', color: '#1e40af' }}>
+                Você tem permissão de Administrador. Os endpoints de gerenciamento de usuários
+                (`GET/POST/PUT/DELETE /api/funcionarios/`) estão disponíveis para sua credencial.
+              </p>
+              <div
+                style={{
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #dbeafe',
+                  borderRadius: '6px',
+                  padding: '1rem',
+                  fontSize: '0.8125rem',
+                  color: '#3b82f6',
+                }}
+              >
+                ✓ Autorização garantida pelo backend via token JWT validado (`SupabaseJWTAuthentication`).
+              </div>
+            </section>
+
+            <FuncionariosManager
+              token={session?.access_token ?? null}
+              currentUser={profile}
+            />
+          </div>
         ) : (
           <section
             style={{

@@ -194,6 +194,72 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
         resp = self.client.get('/api/funcionarios/')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_funcionario_nao_admin_bloqueado_em_todas_operacoes_crud(self):
+        """
+        Garante que usuários autenticados sem perfil de Administrador (isAdmin=False)
+        recebam 403 Forbidden em todas as operações de CRUD de funcionários.
+        """
+        token_colab = gerar_token_supabase(email='colab@intech.com.br', sub=COLAB_SUB)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_colab}')
+
+        # Listagem
+        self.assertEqual(
+            self.client.get('/api/funcionarios/').status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        # Detalhe
+        self.assertEqual(
+            self.client.get(f'/api/funcionarios/{self.admin.idFuncionario}/').status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        # Criação
+        self.assertEqual(
+            self.client.post(
+                '/api/funcionarios/',
+                {
+                    'nome': 'Tentativa Sem Permissão',
+                    'email': 'bloqueado@intech.com.br',
+                    'senha': 'senha123',
+                    'isAdmin': False,
+                },
+                format='json',
+            ).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        # Atualização (PATCH / PUT)
+        self.assertEqual(
+            self.client.patch(
+                f'/api/funcionarios/{self.funcionario.idFuncionario}/',
+                {'nome': 'Alterado'},
+                format='json',
+            ).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        # Exclusão por ID e por e-mail
+        self.assertEqual(
+            self.client.delete(
+                f'/api/funcionarios/{self.admin.idFuncionario}/'
+            ).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+        self.assertEqual(
+            self.client.delete(
+                '/api/funcionarios/deletar-por-email/?email=admin@intech.com.br'
+            ).status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_admin_nao_pode_excluir_proprio_usuario_por_id(self):
+        """Administrador não pode remover o próprio registro via DELETE /api/funcionarios/{id}/."""
+        token_admin = gerar_token_supabase(email='admin@intech.com.br', sub=ADMIN_SUB)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_admin}')
+
+        resp = self.client.delete(f'/api/funcionarios/{self.admin.idFuncionario}/')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(
+            Funcionario.objects.filter(idFuncionario=self.admin.idFuncionario).exists()
+        )
+
     @patch('funcionarios.serializers.SupabaseClient.create_auth_user')
     def test_rf01_01_a_04_crud_usuario_por_admin_com_token_supabase(self, mock_create_auth_user):
         """RF01.01 a RF01.04 - CRUD de perfis pelo Administrador autenticado no Supabase."""
