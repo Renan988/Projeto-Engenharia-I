@@ -28,12 +28,19 @@ export default async function FuncionariosPage() {
   if (session?.access_token) {
     try {
       profile = await fetchCurrentProfile(session.access_token)
-    } catch (err: unknown) {
-      profileError =
-        err instanceof Error
-          ? err.message
-          : 'Não foi possível carregar os dados funcionais vinculados no backend.'
+      if (!profile || profile.is_active === false) {
+        await supabase.auth.signOut()
+        redirect('/login')
+      }
+      if (!profile.isAdmin) {
+        redirect('/dashboard')
+      }
+    } catch {
+      await supabase.auth.signOut()
+      redirect('/login')
     }
+  } else {
+    redirect('/login')
   }
 
   return (

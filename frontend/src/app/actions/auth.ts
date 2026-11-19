@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { fetchCurrentProfile } from '@/api/client'
 
 export interface ActionState {
   error?: string | null
@@ -28,7 +29,7 @@ export async function loginAction(
 
   const supabase = await createClient()
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   })
@@ -39,6 +40,29 @@ export async function loginAction(
         error.message === 'Invalid login credentials'
           ? 'E-mail ou senha incorretos.'
           : error.message,
+    }
+  }
+
+  // Validação de sincronização: perfil precisa existir e estar ativo no backend Django
+  const token = data.session?.access_token
+  if (token) {
+    try {
+      const profile = await fetchCurrentProfile(token)
+      if (!profile || profile.is_active === false) {
+        await supabase.auth.signOut()
+        return {
+          error: 'Este usuário foi inativado ou não possui permissão de acesso ao sistema.',
+        }
+      }
+    } catch (err: unknown) {
+      await supabase.auth.signOut()
+      const message =
+        err instanceof Error ? err.message : 'Falha na validação do perfil.'
+      return {
+        error: message.toLowerCase().includes('inativo')
+          ? 'Este perfil de funcionário está inativo. Acesso negado.'
+          : 'Usuário não possui perfil ativo vinculado no sistema.',
+      }
     }
   }
 
