@@ -27,10 +27,11 @@ class FuncionarioFilter(django_filters.FilterSet):
     nome = django_filters.CharFilter(field_name='nome', lookup_expr='icontains')
     email = django_filters.CharFilter(field_name='email', lookup_expr='icontains')
     isAdmin = django_filters.BooleanFilter(field_name='isAdmin')
+    is_active = django_filters.BooleanFilter(field_name='is_active')
 
     class Meta:
         model = Funcionario
-        fields = ['nome', 'email', 'isAdmin']
+        fields = ['nome', 'email', 'isAdmin', 'is_active']
 
 
 class FuncionarioViewSet(viewsets.ModelViewSet):
@@ -39,21 +40,37 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
     - RF01.01: Inserir Usuário (POST /api/funcionarios/)
     - RF01.02: Listar Usuários com filtros em nome e email (GET /api/funcionarios/?nome=...&email=...)
     - RF01.03: Atualizar Usuário (PUT/PATCH /api/funcionarios/{idFuncionario}/)
-    - RF01.04: Deletar Usuário por ID ou informando o e-mail (DELETE /api/funcionarios/{id}/ ou /deletar-por-email/)
+    - RF01.04: Inativar Usuário por ID ou informando o e-mail (DELETE /api/funcionarios/{id}/ ou /deletar-por-email/)
     """
 
-    queryset = Funcionario.objects.all().order_by('nome')
     serializer_class = FuncionarioSerializer
     permission_classes = [IsAuthenticated, IsAdminFuncionario]
     filterset_class = FuncionarioFilter
     search_fields = ['nome', 'email']
     ordering_fields = ['idFuncionario', 'nome', 'email']
 
+    def get_queryset(self):
+        queryset = Funcionario.objects.all().order_by('nome')
+        if 'is_active' not in self.request.query_params:
+            return queryset.filter(is_active=True)
+        return queryset
+
     def get_serializer_class(self):
         # A senha só é aceita na criação e é encaminhada ao Supabase Auth.
         if self.action == 'create':
             return FuncionarioCreateSerializer
         return FuncionarioSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        dados = {
+            'detail': 'Usuário cadastrado com sucesso.',
+            **serializer.data,
+        }
+        return Response(dados, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
         novo_func = serializer.save()
@@ -72,9 +89,10 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance: Funcionario):
         email_removido = instance.email
         nome_removido = instance.nome
-        instance.delete()
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])
         LogRastreabilidade.registrarLog(
-            acao=f'Removeu o usuário {nome_removido} ({email_removido})',
+            acao=f'Inativou o usuário {nome_removido} ({email_removido})',
             funcionario=self.request.user,
         )
 
@@ -88,7 +106,7 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
         email_removido = instance.email
         self.perform_destroy(instance)
         return Response(
-            {'detail': f'Usuário "{email_removido}" deletado com sucesso.'},
+            {'detail': f'Usuário "{email_removido}" inativado com sucesso.'},
             status=status.HTTP_200_OK,
         )
 
@@ -98,7 +116,7 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
         url_path='deletar-por-email',
     )
     def deletar_por_email(self, request):
-        """Deleta um usuário informando o e-mail (RF01.04)."""
+        """Inativa um usuário informando o e-mail (RF01.04)."""
         email = (
             request.data.get('email')
             or request.query_params.get('email')
@@ -126,7 +144,7 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
 
         self.perform_destroy(alvo)
         return Response(
-            {'detail': f'Usuário "{email}" deletado com sucesso.'},
+            {'detail': f'Usuário "{email}" inativado com sucesso.'},
             status=status.HTTP_200_OK,
         )
 

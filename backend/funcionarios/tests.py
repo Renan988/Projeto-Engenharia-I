@@ -307,12 +307,34 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
         self.assertTrue(resp_update.data['isAdmin'])
         self.assertEqual(resp_update.data['nome'], 'Funcionário Atualizado')
 
-        # RF01.04 - Deletar Usuário informando o e-mail
+        # RF01.04 - Inativar Usuário informando o e-mail (Exclusão Lógica)
         resp_delete = self.client.delete(
             '/api/funcionarios/deletar-por-email/?email=novo@intech.com.br'
         )
         self.assertEqual(resp_delete.status_code, status.HTTP_200_OK)
-        self.assertFalse(Funcionario.objects.filter(email='novo@intech.com.br').exists())
+        novo_inativo = Funcionario.objects.get(email='novo@intech.com.br')
+        self.assertFalse(novo_inativo.is_active)
+        # Na listagem padrão de ativos, o funcionário inativado não aparece
+        resp_list_after = self.client.get('/api/funcionarios/?email=novo@intech.com.br')
+        self.assertEqual(len(resp_list_after.data), 0)
+
+    def test_exclusao_logica_por_id_inativa_usuario_e_rejeita_autenticacao(self):
+        """RF01.04 - Exclusão lógica inativa o usuário (is_active=False) e bloqueia novas autenticações."""
+        token_admin = gerar_token_supabase(email='admin@intech.com.br', sub=ADMIN_SUB)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_admin}')
+
+        resp_del = self.client.delete(f'/api/funcionarios/{self.funcionario.idFuncionario}/')
+        self.assertEqual(resp_del.status_code, status.HTTP_200_OK)
+
+        self.funcionario.refresh_from_db()
+        self.assertFalse(self.funcionario.is_active)
+
+        # Usuário inativo tenta acessar /api/funcionarios/me/ e recebe 401
+        token_inativo = gerar_token_supabase(email='colab@intech.com.br', sub=COLAB_SUB)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_inativo}')
+        resp_me = self.client.get('/api/funcionarios/me/')
+        self.assertEqual(resp_me.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn('inativo', resp_me.data.get('detail', '').lower())
 
     @patch('funcionarios.serializers.SupabaseClient.create_auth_user')
     def test_criacao_sem_supabase_nao_cria_perfil_orfao(self, mock_create_auth_user):

@@ -29,12 +29,16 @@ export default async function DashboardPage() {
   if (session?.access_token) {
     try {
       profile = await fetchCurrentProfile(session.access_token)
-    } catch (err: unknown) {
-      profileError =
-        err instanceof Error
-          ? err.message
-          : 'Não foi possível carregar os dados funcionais vinculados no backend.'
+      if (!profile || profile.is_active === false) {
+        await supabase.auth.signOut()
+        redirect('/login')
+      }
+    } catch {
+      await supabase.auth.signOut()
+      redirect('/login')
     }
+  } else {
+    redirect('/login')
   }
 
   return (

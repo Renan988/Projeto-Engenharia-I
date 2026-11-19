@@ -84,7 +84,25 @@ class FuncionarioCreateSerializer(FuncionarioSerializer):
                 }
             )
 
-        validated_data['supabase_user_id'] = identidade_supabase['id']
+        identidade_id = identidade_supabase['id']
+
+        # Verifica se o gatilho automático do Supabase (on_auth_user_created)
+        # já inseriu o registro na tabela FUNCIONARIO do PostgreSQL.
+        funcionario = Funcionario.objects.filter(
+            email__iexact=validated_data['email']
+        ).first()
+
+        if funcionario is not None:
+            funcionario.nome = validated_data['nome']
+            funcionario.isAdmin = validated_data.get('isAdmin', False)
+            funcionario.is_staff = bool(validated_data.get('isAdmin', False))
+            funcionario.is_superuser = bool(validated_data.get('isAdmin', False))
+            funcionario.is_active = True
+            funcionario.supabase_user_id = identidade_id
+            funcionario.save()
+            return funcionario
+
+        validated_data['supabase_user_id'] = identidade_id
         return Funcionario.objects.create_user(**validated_data)
 
 

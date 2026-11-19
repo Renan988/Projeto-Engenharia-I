@@ -207,7 +207,7 @@ export function FuncionariosManager({
         [...prev, created].sort((a, b) => a.nome.localeCompare(b.nome))
       )
       setIsFormOpen(false)
-      setSuccessMessage(`Funcionário "${created.nome}" cadastrado com sucesso.`)
+      setSuccessMessage('Usuário cadastrado com sucesso.')
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Erro ao cadastrar funcionário.'

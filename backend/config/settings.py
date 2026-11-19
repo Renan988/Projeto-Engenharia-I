@@ -5,6 +5,7 @@ Integrado com Supabase (Banco de Dados PostgreSQL + Autenticação exclusiva via
 
 import os
 import socket
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -80,45 +81,19 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # ==============================================================================
-# BANCO DE DADOS E SUPABASE (PostgreSQL na nuvem + Autenticação via Supabase Auth)
+# BANCO DE DADOS E SUPABASE (PostgreSQL exclusivo na nuvem Supabase)
 # ==============================================================================
 DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
-IS_POSTGRES = DATABASE_URL.startswith(('postgres://', 'postgresql://'))
+IS_TESTING = 'test' in sys.argv
 
-
-def _porta_postgres_acessivel(db_url: str) -> bool:
-    """
-    Verifica rapidamente (1.5s) se a rede atual permite saída na porta 5432/6543.
-    """
-    try:
-        parsed = urlparse(db_url)
-        host = parsed.hostname
-        port = parsed.port or 5432
-        if not host or '[' in db_url:
-            return False
-        with socket.create_connection((host, port), timeout=1.5):
-            return True
-    except OSError:
-        return False
-
-
-def _porta_postgres_acessivel(db_url: str) -> bool:
-    """
-    Verifica rapidamente (1.5s) se a rede atual permite saída na porta 5432/6543.
-    """
-    try:
-        parsed = urlparse(db_url)
-        host = parsed.hostname
-        port = parsed.port or 5432
-        if not host or '[' in db_url:
-            return False
-        with socket.create_connection((host, port), timeout=1.5):
-            return True
-    except OSError:
-        return False
-
-
-if IS_POSTGRES and _porta_postgres_acessivel(DATABASE_URL):
+if IS_TESTING:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': ':memory:',
+        }
+    }
+elif DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.parse(
             DATABASE_URL,
@@ -126,14 +101,9 @@ if IS_POSTGRES and _porta_postgres_acessivel(DATABASE_URL):
             ssl_require='supabase.co' in DATABASE_URL,
         )
     }
-    DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 5
+    DATABASES['default'].setdefault('OPTIONS', {})['connect_timeout'] = 10
 else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+    raise RuntimeError('DATABASE_URL não configurada no .env. Configure a URL do PostgreSQL do Supabase.')
 
 # Credenciais do Supabase Auth / API (A service_role permanece estritamente no backend)
 SUPABASE_URL = os.getenv('SUPABASE_URL', '').strip()

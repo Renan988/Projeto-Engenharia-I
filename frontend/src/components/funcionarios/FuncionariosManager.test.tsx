@@ -194,7 +194,7 @@ describe('FuncionariosManager Component (CRUD de Funcionários)', () => {
     })
 
     expect(
-      await screen.findByText('Funcionário "Pedro Santos" cadastrado com sucesso.')
+      await screen.findByText('Usuário cadastrado com sucesso.')
     ).toBeInTheDocument()
     expect(screen.getByText('Pedro Santos')).toBeInTheDocument()
   })
