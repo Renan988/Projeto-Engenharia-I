@@ -92,10 +92,10 @@ BEGIN
         NEW.id,
         COALESCE(NEW.raw_user_meta_data->>'nome', split_part(NEW.email, '@', 1)),
         NEW.email,
-        COALESCE((NEW.raw_user_meta_data->>'isAdmin')::boolean, FALSE),
+        FALSE,
         TRUE,
-        COALESCE((NEW.raw_user_meta_data->>'isAdmin')::boolean, FALSE),
-        COALESCE((NEW.raw_user_meta_data->>'isAdmin')::boolean, FALSE)
+        FALSE,
+        FALSE
     )
     ON CONFLICT ("email") DO UPDATE
         SET "supabaseUserId" = COALESCE("FUNCIONARIO"."supabaseUserId", EXCLUDED."supabaseUserId");

@@ -10,10 +10,12 @@ e-mail de login e senha pertencem ao Supabase Auth:
 """
 
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 
 from config.supabase_client import SupabaseClient
 
 from .models import Funcionario
+from .services import atualizar_funcionario, criar_funcionario
 
 
 class FuncionarioSerializer(serializers.ModelSerializer):
@@ -33,14 +35,30 @@ class FuncionarioSerializer(serializers.ModelSerializer):
             'is_active',
         ]
         read_only_fields = ['idFuncionario', 'supabase_user_id', 'perfil']
+        extra_kwargs = {
+            'email': {
+                'validators': [UniqueValidator(
+                    queryset=Funcionario.objects.all(),
+                    lookup='iexact',
+                    message='Esse e-mail já está cadastrado.',
+                )],
+            },
+        }
+
+    def validate_email(self, email):
+        return email.lower()
+
+    def validate(self, attrs):
+        if self.instance is not None:
+            if 'senha' in self.initial_data or 'password' in self.initial_data:
+                raise serializers.ValidationError({'senha': 'Altere a senha pelo Supabase Auth.'})
+            request = self.context.get('request')
+            if attrs.get('is_active') is False and request and request.user.pk == self.instance.pk:
+                raise serializers.ValidationError({'is_active': 'Não é permitido inativar o próprio usuário.'})
+        return attrs
 
     def update(self, instance: Funcionario, validated_data):
-        return instance.manterFuncionario(
-            nome=validated_data.get('nome'),
-            email=validated_data.get('email'),
-            isAdmin=validated_data.get('isAdmin'),
-            is_active=validated_data.get('is_active'),
-        )
+        return atualizar_funcionario(instance, **validated_data)
 
 
 class FuncionarioCreateSerializer(FuncionarioSerializer):
@@ -55,6 +73,7 @@ class FuncionarioCreateSerializer(FuncionarioSerializer):
         write_only=True,
         required=True,
         min_length=6,
+        trim_whitespace=False,
         style={'input_type': 'password'},
         help_text=(
             'Senha de acesso criada no Supabase Auth. Não é armazenada pelo backend '
@@ -66,44 +85,7 @@ class FuncionarioCreateSerializer(FuncionarioSerializer):
         fields = FuncionarioSerializer.Meta.fields + ['senha']
 
     def create(self, validated_data):
-        senha = validated_data.pop('senha')
-
-        identidade_supabase = SupabaseClient.create_auth_user(
-            email=validated_data['email'],
-            password=senha,
-            nome=validated_data['nome'],
-            is_admin=validated_data.get('isAdmin', False),
-        )
-        if not identidade_supabase or not identidade_supabase.get('id'):
-            raise serializers.ValidationError(
-                {
-                    'detail': (
-                        'Não foi possível criar a identidade no Supabase Auth. '
-                        'Verifique se o Supabase está configurado e tente novamente.'
-                    )
-                }
-            )
-
-        identidade_id = identidade_supabase['id']
-
-        # Verifica se o gatilho automático do Supabase (on_auth_user_created)
-        # já inseriu o registro na tabela FUNCIONARIO do PostgreSQL.
-        funcionario = Funcionario.objects.filter(
-            email__iexact=validated_data['email']
-        ).first()
-
-        if funcionario is not None:
-            funcionario.nome = validated_data['nome']
-            funcionario.isAdmin = validated_data.get('isAdmin', False)
-            funcionario.is_staff = bool(validated_data.get('isAdmin', False))
-            funcionario.is_superuser = bool(validated_data.get('isAdmin', False))
-            funcionario.is_active = True
-            funcionario.supabase_user_id = identidade_id
-            funcionario.save()
-            return funcionario
-
-        validated_data['supabase_user_id'] = identidade_id
-        return Funcionario.objects.create_user(**validated_data)
+        return criar_funcionario(**validated_data)
 
 
 class LoginSerializer(serializers.Serializer):
@@ -118,6 +100,7 @@ class LoginSerializer(serializers.Serializer):
     senha = serializers.CharField(
         required=True,
         write_only=True,
+        trim_whitespace=False,
         style={'input_type': 'password'},
     )
 

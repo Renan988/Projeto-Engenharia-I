@@ -15,10 +15,13 @@ import uuid
 from unittest.mock import patch
 
 import jwt
-from django.db import connection
-from django.test import override_settings
+import requests
+from django.db import DatabaseError, connection
+from django.test import SimpleTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
+
+from config.supabase_client import SupabaseAdminError, SupabaseClient
 
 from .models import Funcionario
 
@@ -260,14 +263,12 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
             Funcionario.objects.filter(idFuncionario=self.admin.idFuncionario).exists()
         )
 
-    @patch('funcionarios.serializers.SupabaseClient.create_auth_user')
-    def test_rf01_01_a_04_crud_usuario_por_admin_com_token_supabase(self, mock_create_auth_user):
+    @patch('funcionarios.services.SupabaseClient.set_auth_user_active')
+    @patch('funcionarios.services.SupabaseClient.create_auth_user')
+    def test_rf01_01_a_04_crud_usuario_por_admin_com_token_supabase(self, mock_create_auth_user, mock_set_active):
         """RF01.01 a RF01.04 - CRUD de perfis pelo Administrador autenticado no Supabase."""
-        identidade_novo = str(uuid.uuid4())
-        mock_create_auth_user.return_value = {
-            'id': identidade_novo,
-            'email': 'novo@intech.com.br',
-        }
+        identidade_novo = uuid.uuid4()
+        mock_create_auth_user.return_value = identidade_novo
 
         token_admin = gerar_token_supabase(email='admin@intech.com.br', sub=ADMIN_SUB)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_admin}')
@@ -288,7 +289,7 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
         mock_create_auth_user.assert_called_once()
 
         novo = Funcionario.objects.get(email='novo@intech.com.br')
-        self.assertEqual(str(novo.supabase_user_id), identidade_novo)
+        self.assertEqual(novo.supabase_user_id, identidade_novo)
 
         # RF01.02 - Listar Usuários com filtro
         resp_list = self.client.get('/api/funcionarios/?nome=Novo&email=novo@intech')
@@ -300,25 +301,29 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
         id_novo = resp_create.data['idFuncionario']
         resp_update = self.client.patch(
             f'/api/funcionarios/{id_novo}/',
-            {'nome': 'Funcionário Atualizado', 'isAdmin': True},
+            {'nome': 'Funcionário Atualizado', 'email': 'contato@intech.com.br', 'isAdmin': True},
             format='json',
         )
         self.assertEqual(resp_update.status_code, status.HTTP_200_OK)
         self.assertTrue(resp_update.data['isAdmin'])
         self.assertEqual(resp_update.data['nome'], 'Funcionário Atualizado')
+        self.assertEqual(resp_update.data['email'], 'contato@intech.com.br')
+        mock_set_active.assert_not_called()
 
         # RF01.04 - Inativar Usuário informando o e-mail (Exclusão Lógica)
         resp_delete = self.client.delete(
-            '/api/funcionarios/deletar-por-email/?email=novo@intech.com.br'
+            '/api/funcionarios/deletar-por-email/?email=contato@intech.com.br'
         )
         self.assertEqual(resp_delete.status_code, status.HTTP_200_OK)
-        novo_inativo = Funcionario.objects.get(email='novo@intech.com.br')
+        mock_set_active.assert_called_once_with(identidade_novo, False)
+        novo_inativo = Funcionario.objects.get(email='contato@intech.com.br')
         self.assertFalse(novo_inativo.is_active)
         # Na listagem padrão de ativos, o funcionário inativado não aparece
-        resp_list_after = self.client.get('/api/funcionarios/?email=novo@intech.com.br')
+        resp_list_after = self.client.get('/api/funcionarios/?email=contato@intech.com.br')
         self.assertEqual(len(resp_list_after.data), 0)
 
-    def test_exclusao_logica_por_id_inativa_usuario_e_rejeita_autenticacao(self):
+    @patch('funcionarios.services.SupabaseClient.set_auth_user_active')
+    def test_exclusao_logica_por_id_inativa_usuario_e_rejeita_autenticacao(self, mock_set_active):
         """RF01.04 - Exclusão lógica inativa o usuário (is_active=False) e bloqueia novas autenticações."""
         token_admin = gerar_token_supabase(email='admin@intech.com.br', sub=ADMIN_SUB)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_admin}')
@@ -328,6 +333,7 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
 
         self.funcionario.refresh_from_db()
         self.assertFalse(self.funcionario.is_active)
+        mock_set_active.assert_called_once_with(uuid.UUID(COLAB_SUB), False)
 
         # Usuário inativo tenta acessar /api/funcionarios/me/ e recebe 401
         token_inativo = gerar_token_supabase(email='colab@intech.com.br', sub=COLAB_SUB)
@@ -336,10 +342,10 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
         self.assertEqual(resp_me.status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertIn('inativo', resp_me.data.get('detail', '').lower())
 
-    @patch('funcionarios.serializers.SupabaseClient.create_auth_user')
+    @patch('funcionarios.services.SupabaseClient.create_auth_user')
     def test_criacao_sem_supabase_nao_cria_perfil_orfao(self, mock_create_auth_user):
         """Se o Supabase Auth não criar a identidade, nenhum perfil é persistido."""
-        mock_create_auth_user.return_value = None
+        mock_create_auth_user.side_effect = SupabaseAdminError('unavailable')
         token_admin = gerar_token_supabase(email='admin@intech.com.br', sub=ADMIN_SUB)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_admin}')
 
@@ -352,7 +358,7 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
             },
             format='json',
         )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertFalse(
             Funcionario.objects.filter(email='sem.identidade@intech.com.br').exists()
         )
@@ -380,3 +386,188 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
             email='colab@intech.com.br',
             password='senha123',
         )
+
+    def autenticar_admin(self):
+        token = gerar_token_supabase(email=self.admin.email, sub=ADMIN_SUB)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    @patch('funcionarios.services.SupabaseClient.create_auth_user')
+    def test_valida_dados_antes_de_chamar_auth(self, mock_create):
+        self.autenticar_admin()
+        resposta = self.client.post('/api/funcionarios/', {
+            'nome': '', 'email': self.funcionario.email.upper(), 'senha': 'curta',
+        }, format='json')
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertEqual(set(resposta.data), {'nome', 'email', 'senha'})
+        mock_create.assert_not_called()
+
+    @patch('funcionarios.services.SupabaseClient.create_auth_user')
+    def test_email_duplicado_no_auth_retorna_erro_no_campo(self, mock_create):
+        self.autenticar_admin()
+        mock_create.side_effect = SupabaseAdminError('email_exists')
+        resposta = self.client.post('/api/funcionarios/', {
+            'nome': 'Novo', 'email': 'novo@example.com', 'senha': 'senha123',
+        }, format='json')
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn('já está cadastrado', resposta.data['email'])
+        self.assertFalse(Funcionario.objects.filter(email='novo@example.com').exists())
+
+    @patch('funcionarios.services.SupabaseClient.create_auth_user')
+    def test_reutiliza_perfil_criado_pelo_gatilho_com_mesmo_uuid(self, mock_create):
+        self.autenticar_admin()
+        identidade = uuid.uuid4()
+
+        def criar_perfil_do_gatilho(**dados):
+            Funcionario.objects.create_user(
+                nome=dados['nome'], email=dados['email'], supabase_user_id=identidade,
+            )
+            return identidade
+
+        mock_create.side_effect = criar_perfil_do_gatilho
+        resposta = self.client.post('/api/funcionarios/', {
+            'nome': 'Novo Admin', 'email': 'novo@example.com', 'senha': ' senha123 ', 'isAdmin': True,
+        }, format='json')
+
+        self.assertEqual(resposta.status_code, 201)
+        perfil = Funcionario.objects.get(supabase_user_id=identidade)
+        self.assertEqual(perfil.pk, resposta.data['idFuncionario'])
+        self.assertTrue(perfil.isAdmin)
+        mock_create.assert_called_once_with(
+            nome='Novo Admin', email='novo@example.com', password=' senha123 ', is_active=True,
+        )
+
+    @patch('funcionarios.services.SupabaseClient.delete_auth_user')
+    @patch('funcionarios.services.SupabaseClient.create_auth_user')
+    @patch.object(Funcionario.objects, 'create_user', side_effect=DatabaseError('erro simulado'))
+    def test_falha_ao_salvar_perfil_reverte_identidade(self, mock_save, mock_create, mock_delete):
+        self.autenticar_admin()
+        identidade = uuid.uuid4()
+        mock_create.return_value = identidade
+        resposta = self.client.post('/api/funcionarios/', {
+            'nome': 'Novo', 'email': 'novo@example.com', 'senha': 'senha123',
+        }, format='json')
+
+        self.assertEqual(resposta.status_code, 500)
+        mock_save.assert_called_once()
+        mock_delete.assert_called_once_with(identidade)
+        self.assertFalse(Funcionario.objects.filter(supabase_user_id=identidade).exists())
+
+    @patch('funcionarios.services.LogRastreabilidade.registrarLog', side_effect=DatabaseError)
+    @patch('funcionarios.services.SupabaseClient.delete_auth_user')
+    @patch('funcionarios.services.SupabaseClient.create_auth_user')
+    def test_falha_de_auditoria_remove_perfil_gerado_pelo_gatilho(self, mock_create, mock_delete, mock_log):
+        self.autenticar_admin()
+        identidade = uuid.uuid4()
+
+        def criar_perfil_do_gatilho(**dados):
+            Funcionario.objects.create_user(
+                nome=dados['nome'], email=dados['email'], supabase_user_id=identidade,
+            )
+            return identidade
+
+        mock_create.side_effect = criar_perfil_do_gatilho
+        resposta = self.client.post('/api/funcionarios/', {
+            'nome': 'Novo', 'email': 'novo@example.com', 'senha': 'senha123',
+        }, format='json')
+
+        self.assertEqual(resposta.status_code, 500)
+        mock_log.assert_called_once()
+        mock_delete.assert_called_once_with(identidade)
+        self.assertFalse(Funcionario.objects.filter(supabase_user_id=identidade).exists())
+
+    @patch('funcionarios.services.SupabaseClient.set_auth_user_active')
+    def test_falha_ao_inativar_no_auth_mantem_perfil_inativo_e_permite_repetir(self, mock_set_active):
+        self.autenticar_admin()
+        mock_set_active.side_effect = [SupabaseAdminError('unavailable'), None]
+        url = f'/api/funcionarios/{self.funcionario.pk}/'
+
+        resposta = self.client.delete(url)
+        self.assertEqual(resposta.status_code, 503)
+        self.assertIn('Repita', resposta.data['detail'])
+        self.funcionario.refresh_from_db()
+        self.assertFalse(self.funcionario.is_active)
+
+        self.assertEqual(self.client.delete(url).status_code, 200)
+        self.assertEqual(mock_set_active.call_count, 2)
+
+    @patch('funcionarios.services.SupabaseClient.set_auth_user_active')
+    def test_reativacao_so_altera_perfil_apos_confirmacao_do_auth(self, mock_set_active):
+        self.autenticar_admin()
+        self.funcionario.is_active = False
+        self.funcionario.save(update_fields=['is_active'])
+        mock_set_active.side_effect = [SupabaseAdminError('unavailable'), None]
+        url = f'/api/funcionarios/{self.funcionario.pk}/'
+
+        self.assertEqual(self.client.patch(url, {'is_active': True}, format='json').status_code, 503)
+        self.funcionario.refresh_from_db()
+        self.assertFalse(self.funcionario.is_active)
+        self.assertEqual(self.client.patch(url, {'is_active': True}, format='json').status_code, 200)
+        self.funcionario.refresh_from_db()
+        self.assertTrue(self.funcionario.is_active)
+
+    @patch('funcionarios.services.SupabaseClient.set_auth_user_active')
+    def test_atualizacao_de_perfil_rejeita_senha_inativacao_propria_e_perfil_inexistente(self, mock_set_active):
+        self.autenticar_admin()
+        url = f'/api/funcionarios/{self.admin.pk}/'
+        self.assertEqual(self.client.patch(url, {'senha': 'nova-senha'}, format='json').status_code, 400)
+        self.assertEqual(self.client.patch(url, {'is_active': False}, format='json').status_code, 400)
+        self.assertEqual(self.client.delete('/api/funcionarios/9999/').status_code, 404)
+        self.assertEqual(self.client.delete(
+            f'/api/funcionarios/deletar-por-email/?email={self.admin.email}',
+        ).status_code, 400)
+        mock_set_active.assert_not_called()
+
+
+@override_settings(
+    SUPABASE_URL=URL_PROJETO_SUPABASE,
+    SUPABASE_ANON_KEY='sb_publishable_teste',
+    SUPABASE_SERVICE_ROLE_KEY='sb_secret_teste',
+)
+class SupabaseAdminClientTests(SimpleTestCase):
+    @override_settings(SUPABASE_SERVICE_ROLE_KEY='')
+    @patch('config.supabase_client.requests.request')
+    def test_sem_chave_privilegiada_nao_chama_signup_publico(self, request):
+        with self.assertRaisesMessage(SupabaseAdminError, 'not_configured'):
+            SupabaseClient.create_auth_user('novo@example.com', 'senha123', 'Novo')
+        request.assert_not_called()
+
+    @patch('config.supabase_client.requests.request')
+    def test_cria_identidade_com_chave_administrativa_e_bloqueio_inicial(self, request):
+        request.return_value.status_code = 201
+        request.return_value.json.return_value = {'id': COLAB_SUB}
+
+        identidade = SupabaseClient.create_auth_user('novo@example.com', 'senha123', 'Novo', is_active=False)
+
+        self.assertEqual(identidade, uuid.UUID(COLAB_SUB))
+        request.assert_called_once_with(
+            'POST', f'{ISSUER_PROJETO}/admin/users',
+            json={
+                'email': 'novo@example.com', 'password': 'senha123', 'email_confirm': True,
+                'user_metadata': {'nome': 'Novo'}, 'ban_duration': SupabaseClient.AUTH_BAN_DURATION,
+            },
+            headers={'apikey': 'sb_secret_teste', 'Content-Type': 'application/json'},
+            timeout=5, allow_redirects=False,
+        )
+
+    @patch('config.supabase_client.requests.request')
+    def test_bloqueia_e_reativa_por_uuid(self, request):
+        request.return_value.status_code = 200
+        identidade = uuid.UUID(COLAB_SUB)
+        for ativo, duracao in [(False, SupabaseClient.AUTH_BAN_DURATION), (True, 'none')]:
+            with self.subTest(ativo=ativo):
+                SupabaseClient.set_auth_user_active(identidade, ativo)
+                self.assertEqual(request.call_args.args, ('PUT', f'{ISSUER_PROJETO}/admin/users/{identidade}'))
+                self.assertEqual(request.call_args.kwargs['json'], {'ban_duration': duracao})
+
+    @patch('config.supabase_client.requests.request')
+    def test_trata_email_duplicado_e_timeout_sem_expor_resposta_do_provedor(self, request):
+        request.return_value.status_code = 422
+        request.return_value.json.return_value = {'error_code': 'email_exists', 'msg': 'Detalhe privado'}
+        with self.assertRaisesMessage(SupabaseAdminError, 'email_exists'):
+            SupabaseClient.create_auth_user('novo@example.com', 'senha123', 'Novo')
+
+        request.side_effect = requests.Timeout('Detalhe privado')
+        with self.assertRaisesMessage(SupabaseAdminError, 'unavailable'):
+            SupabaseClient.create_auth_user('novo@example.com', 'senha123', 'Novo')
