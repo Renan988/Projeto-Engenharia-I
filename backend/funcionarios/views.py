@@ -19,6 +19,7 @@ from .serializers import (
     FuncionarioSerializer,
     LoginSerializer,
 )
+from .services import atualizar_funcionario
 
 
 class FuncionarioFilter(django_filters.FilterSet):
@@ -51,7 +52,7 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Funcionario.objects.all().order_by('nome')
-        if 'is_active' not in self.request.query_params:
+        if self.action in ('list', 'retrieve') and 'is_active' not in self.request.query_params:
             return queryset.filter(is_active=True)
         return queryset
 
@@ -73,11 +74,7 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
         return Response(dados, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
-        novo_func = serializer.save()
-        LogRastreabilidade.registrarLog(
-            acao=f'Cadastrou o usuário {novo_func.nome} ({novo_func.email})',
-            funcionario=self.request.user,
-        )
+        serializer.save(autor=self.request.user)
 
     def perform_update(self, serializer):
         func_atualizado = serializer.save()
@@ -89,8 +86,7 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance: Funcionario):
         email_removido = instance.email
         nome_removido = instance.nome
-        instance.is_active = False
-        instance.save(update_fields=['is_active'])
+        atualizar_funcionario(instance, is_active=False)
         LogRastreabilidade.registrarLog(
             acao=f'Inativou o usuário {nome_removido} ({email_removido})',
             funcionario=self.request.user,
@@ -117,11 +113,12 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
     )
     def deletar_por_email(self, request):
         """Inativa um usuário informando o e-mail (RF01.04)."""
-        email = (
+        email_informado = (
             request.data.get('email')
             or request.query_params.get('email')
             or ''
-        ).strip()
+        )
+        email = email_informado.strip() if isinstance(email_informado, str) else ''
         if not email:
             return Response(
                 {'detail': 'Informe o e-mail do usuário a ser deletado.'},
@@ -134,6 +131,11 @@ class FuncionarioViewSet(viewsets.ModelViewSet):
             return Response(
                 {'detail': f'Usuário com e-mail "{email}" não encontrado.'},
                 status=status.HTTP_404_NOT_FOUND,
+            )
+        except Funcionario.MultipleObjectsReturned:
+            return Response(
+                {'detail': 'Há mais de um perfil com esse e-mail. Informe o ID do funcionário.'},
+                status=status.HTTP_409_CONFLICT,
             )
 
         if alvo.pk == request.user.pk:

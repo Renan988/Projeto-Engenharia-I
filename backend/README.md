@@ -29,8 +29,16 @@ O back-end utiliza o **Supabase** tanto como banco de dados PostgreSQL na nuvem 
 ### Como funciona o Login com o Supabase Auth:
 - **Pelo Front-end (React):** O front-end pode usar o SDK do Supabase (`@supabase/supabase-js`) para fazer login e enviar o `access_token` no cabeçalho `Authorization: Bearer <token>`. A classe [`SupabaseJWTAuthentication`](funcionarios/authentication.py) valida o token e resolve a identidade autenticada (`sub`) para o perfil de `FUNCIONARIO` vinculado por `supabaseUserId`.
 - **Pelo Back-end (`/api/funcionarios/login/`):** O endpoint de login do Django autentica diretamente no **Supabase Auth** via [`SupabaseClient.sign_in_with_password()`](config/supabase_client.py) e retorna os tokens do Supabase + dados do perfil (`Administrador` ou `Funcionário`).
-- **Cadastro de Usuários (`POST /api/funcionarios/`):** Ao cadastrar um colaborador, a identidade (e-mail/senha) é criada no **Supabase Auth** via [`SupabaseClient.create_auth_user()`](config/supabase_client.py). O backend persiste apenas o perfil funcional e o identificador retornado pelo Supabase. Por isso, `SUPABASE_URL`, `SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` precisam estar configurados para o cadastro.
 - **Django Admin:** a rota `/admin/` não é exposta. Toda autenticação é feita pelo Supabase Auth; a administração de usuários ocorre pela API (`/api/funcionarios/`) e a gestão de credenciais pelo painel do Supabase.
+
+### Ciclo de vida de funcionários
+
+- O cadastro e as alterações de atividade usam a API administrativa do Supabase Auth. Configure `SUPABASE_SERVICE_ROLE_KEY` **apenas em `backend/.env`**, com uma chave secreta `sb_secret_...` ou a chave legada `service_role`.
+- `POST /api/funcionarios/` recebe `nome`, `email`, `senha` e `isAdmin`. O Django cria a identidade, grava o perfil vinculado pelo UUID e tenta limpar ambos quando a gravação do perfil falha. Em caso de reversão incompleta, confira o cadastro no Django e no Supabase Auth antes de repetir.
+- `GET /api/funcionarios/` filtra por `nome` e `email`. A listagem exibe perfis ativos por padrão. Use `?is_active=false` para consultar os inativos.
+- `PUT/PATCH /api/funcionarios/{id}/` edita o perfil. O e-mail desse perfil é de contato. Alterações no e-mail de acesso ou na senha são feitas no Supabase Auth.
+- `DELETE /api/funcionarios/{id}/` e `DELETE /api/funcionarios/deletar-por-email/?email=...` inativam o perfil e bloqueiam a identidade por 100 anos, preservando o histórico. Se o Auth falhar, a API devolve `503` e mantém o perfil inativo no Django. Repita a remoção pelo mesmo ID ou e-mail para concluir. Um administrador pode reativar a conta via `PATCH` com `{"is_active": true}`.
+- Se o banco usa o gatilho opcional `on_auth_user_created`, atualize a função `sincronizar_usuario_supabase_auth` do [script SQL](supabase_schema.sql). Perfis gerados pelo gatilho começam como funcionários comuns. A API atribui o perfil administrativo depois de verificar a permissão do administrador solicitante.
 
 ### Modelo de Funcionário e credenciais (Issue #19)
 - A tabela `FUNCIONARIO` mantém apenas os campos de negócio: `idFuncionario`, `supabaseUserId`, `nome`, `email`, `isAdmin` e `is_active`.

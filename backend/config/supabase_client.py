@@ -6,6 +6,7 @@ do projeto configurado.
 """
 
 from typing import Any, Dict, Optional
+from uuid import UUID
 
 import jwt
 import requests
@@ -16,9 +17,18 @@ class SupabaseTokenError(Exception):
     """Exceção lançada quando um token do Supabase é inválido, expirado ou de outro projeto."""
 
 
+class SupabaseAdminError(Exception):
+    """Falha da API administrativa com um código estável e sem dados sensíveis."""
+
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
 class SupabaseClient:
     """Serviço utilitário para integração com Supabase Auth e PostgREST Data API."""
 
+    JWT_CLOCK_SKEW_SECONDS = 10
     _jwks_client: Optional[jwt.PyJWKClient] = None
     _jwks_url_cached: Optional[str] = None
 
@@ -116,6 +126,7 @@ class SupabaseClient:
                 decode_kwargs: Dict[str, Any] = {
                     'algorithms': ['HS256'],
                     'options': {'verify_aud': False, 'verify_exp': True},
+                    'leeway': cls.JWT_CLOCK_SKEW_SECONDS,
                 }
                 if expected_iss and token_iss:
                     decode_kwargs['issuer'] = expected_iss
@@ -148,6 +159,7 @@ class SupabaseClient:
                         algorithms=[alg],
                         issuer=expected_iss if (expected_iss and token_iss) else None,
                         options={'verify_aud': False, 'verify_exp': True},
+                        leeway=cls.JWT_CLOCK_SKEW_SECONDS,
                     )
                     return {
                         'id': payload.get('sub'),
@@ -226,59 +238,71 @@ class SupabaseClient:
             raise ValueError(detalhe)
         return resp.json()
 
-    @classmethod
-    def create_auth_user(
-        cls,
-        email: str,
-        password: str,
-        nome: str,
-        is_admin: bool = False,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Cria um usuário no Supabase Auth quando um Administrador cadastra um Funcionário (RF01.01).
-        """
-        if not cls.is_configured():
-            return None
+    # A exclusão lógica preserva a identidade para uma eventual reativação.
+    AUTH_BAN_DURATION = '876000h'
 
-        base_url = settings.SUPABASE_URL.rstrip('/')
+    @classmethod
+    def _auth_admin_request(cls, method, user_id=None, payload=None):
         service_key = (getattr(settings, 'SUPABASE_SERVICE_ROLE_KEY', '') or '').strip()
-        metadata = {'nome': nome}
+        issuer = cls.expected_issuer()
+        if not issuer or not service_key or service_key == 'sua-service-role-key-do-supabase':
+            raise SupabaseAdminError('not_configured')
+
+        url = f'{issuer}/admin/users'
+        if user_id is not None:
+            url = f'{url}/{user_id}'
+        try:
+            response = requests.request(
+                method, url, json=payload, headers=cls._headers(use_service_role=True),
+                timeout=5, allow_redirects=False,
+            )
+        except requests.RequestException as exc:
+            raise SupabaseAdminError('unavailable') from exc
+
+        if 200 <= response.status_code < 300:
+            return response
 
         try:
-            if service_key and service_key != 'sua-service-role-key-do-supabase':
-                url = f'{base_url}/auth/v1/admin/users'
-                resp = requests.post(
-                    url,
-                    json={
-                        'email': email,
-                        'password': password,
-                        'email_confirm': True,
-                        'user_metadata': metadata,
-                    },
-                    headers=cls._headers(use_service_role=True),
-                    timeout=5,
-                )
-            else:
-                url = f'{base_url}/auth/v1/signup'
-                resp = requests.post(
-                    url,
-                    json={
-                        'email': email,
-                        'password': password,
-                        'data': metadata,
-                    },
-                    headers=cls._headers(),
-                    timeout=5,
-                )
+            error = response.json()
+        except ValueError:
+            error = {}
+        if isinstance(error, dict):
+            code = error.get('error_code') or error.get('code')
+            if code in ('email_exists', 'user_already_exists', 'weak_password', 'user_not_found'):
+                raise SupabaseAdminError(code)
+        raise SupabaseAdminError('unavailable')
 
-            if resp.status_code in (200, 201):
-                dados = resp.json()
-                # O endpoint /signup pode responder {"user": {...}} e o /admin/users
-                # responde o próprio usuário; normaliza para sempre devolver a identidade.
-                return dados.get('user') or dados
-        except (requests.RequestException, ValueError):
-            pass
-        return None
+    @classmethod
+    def create_auth_user(cls, email: str, password: str, nome: str, is_active: bool = True) -> UUID:
+        payload = {
+            'email': email,
+            'password': password,
+            'email_confirm': True,
+            'user_metadata': {'nome': nome},
+        }
+        if not is_active:
+            payload['ban_duration'] = cls.AUTH_BAN_DURATION
+        response = cls._auth_admin_request('POST', payload=payload)
+        try:
+            return UUID(response.json()['id'])
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise SupabaseAdminError('unavailable') from exc
+
+    @classmethod
+    def set_auth_user_active(cls, user_id: UUID, is_active: bool):
+        cls._auth_admin_request(
+            'PUT', user_id=user_id,
+            payload={'ban_duration': 'none' if is_active else cls.AUTH_BAN_DURATION},
+        )
+
+    @classmethod
+    def delete_auth_user(cls, user_id: UUID):
+        """Remove uma identidade cujo cadastro no Django não pôde ser concluído."""
+        try:
+            cls._auth_admin_request('DELETE', user_id=user_id)
+        except SupabaseAdminError as exc:
+            if exc.code != 'user_not_found':
+                raise
 
     @classmethod
     def upsert_table_row(
