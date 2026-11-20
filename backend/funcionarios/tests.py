@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import jwt
 import requests
+from cryptography.hazmat.primitives.asymmetric import ec
 from django.db import DatabaseError, connection
 from django.test import SimpleTestCase, override_settings
 from rest_framework import status
@@ -137,6 +138,19 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_expirado}')
         resp = self.client.get('/api/funcionarios/me/')
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @patch('config.supabase_client.SupabaseClient._get_jwks_client')
+    def test_token_es256_aceita_pequena_diferenca_de_relogio(self, get_jwks_client):
+        key = ec.generate_private_key(ec.SECP256R1())
+        get_jwks_client.return_value.get_signing_key_from_jwt.return_value.key = key.public_key()
+        now = int(time.time())
+        for offset, expected in [(5, 200), (300, 401)]:
+            with self.subTest(offset=offset):
+                token = jwt.encode({
+                    'iss': ISSUER_PROJETO, 'sub': COLAB_SUB, 'exp': now + 3600, 'iat': now + offset,
+                }, key, algorithm='ES256')
+                self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+                self.assertEqual(self.client.get('/api/funcionarios/me/').status_code, expected)
 
     def test_token_destinado_a_outro_projeto_retorna_401(self):
         """Backend rejeita tokens emitidos para outro projeto Supabase (issuer divergente)."""

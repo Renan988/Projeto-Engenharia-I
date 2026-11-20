@@ -28,6 +28,7 @@ class SupabaseAdminError(Exception):
 class SupabaseClient:
     """Serviço utilitário para integração com Supabase Auth e PostgREST Data API."""
 
+    JWT_CLOCK_SKEW_SECONDS = 10
     _jwks_client: Optional[jwt.PyJWKClient] = None
     _jwks_url_cached: Optional[str] = None
 
@@ -125,6 +126,7 @@ class SupabaseClient:
                 decode_kwargs: Dict[str, Any] = {
                     'algorithms': ['HS256'],
                     'options': {'verify_aud': False, 'verify_exp': True},
+                    'leeway': cls.JWT_CLOCK_SKEW_SECONDS,
                 }
                 if expected_iss and token_iss:
                     decode_kwargs['issuer'] = expected_iss
@@ -157,6 +159,7 @@ class SupabaseClient:
                         algorithms=[alg],
                         issuer=expected_iss if (expected_iss and token_iss) else None,
                         options={'verify_aud': False, 'verify_exp': True},
+                        leeway=cls.JWT_CLOCK_SKEW_SECONDS,
                     )
                     return {
                         'id': payload.get('sub'),

@@ -2,7 +2,7 @@
 
 import logging
 
-from django.db import DatabaseError, IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from rest_framework.exceptions import APIException, NotFound, ValidationError
 
 from auditoria.models import LogRastreabilidade
@@ -70,7 +70,15 @@ def reverter_cadastro(identidade):
     # Cada limpeza é tentada mesmo se a outra falhar.
     falhou = False
     try:
-        Funcionario.objects.filter(supabase_user_id=identidade).delete()
+        # O gatilho pode criar o perfil mesmo em bancos provisionados pelo SQL,
+        # onde as tabelas auxiliares de permissões do Django podem estar ausentes.
+        campo = Funcionario._meta.get_field('supabase_user_id')
+        valor = campo.get_db_prep_value(identidade, connection)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'DELETE FROM "FUNCIONARIO" WHERE "supabaseUserId" = %s',
+                [valor],
+            )
     except DatabaseError:
         logger.error('Falha ao limpar o perfil recém-criado para a identidade %s.', identidade)
         falhou = True
