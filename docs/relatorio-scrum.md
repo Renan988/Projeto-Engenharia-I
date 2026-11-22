@@ -145,9 +145,9 @@ A execução do roteiro manual depende das credenciais do projeto Supabase e das
 
 ## 8. Organização do GitHub
 
-Branches: existem 12 branches remotas, incluindo `docs/relatorio-final-ci`. `main` é a padrão e recebeu 10 PRs mergeados. Há um PR aberto, #28, aguardando revisão de Eriky Rayan.
+Branches: existem 12 branches remotas, incluindo `docs/relatorio-final-ci`. `main` é a padrão e recebeu 10 PRs mergeados. Há um PR aberto, #28, aguardando revisão de Eriky Rayan. O workflow de CI adicionado nesse PR rodou duas vezes e terminou com sucesso nas duas execuções.
 
-Issues: 27 issues registradas, 26 fechadas e 1 aberta (#27). As issues de documentação, infraestrutura, autenticação, CRUD e correções estão associadas aos respectivos PRs.
+Issues: 27 issues registradas, todas fechadas. As issues de documentação, infraestrutura, autenticação, CRUD, validação integrada e correções estão associadas aos respectivos PRs.
 
 GitHub Projects: a API clássica de Projects retornou 404. A consulta ao Projects v2 falhou por falta do escopo `read:project` no token disponível. Não foi possível confirmar nem alterar o quadro com as permissões atuais. As issues, PRs e branches foram organizados conforme o histórico do repositório e o estado verificado pela API.
 
