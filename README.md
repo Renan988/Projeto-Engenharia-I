@@ -119,7 +119,7 @@ npm run build
 ```
 
 ### Testes do Back-end (Django Test Suite)
-Na pasta `backend/` com a `.venv` ativada:
+Na pasta `backend/` com a `.venv` ativada. Execute os comandos dentro de `backend/`: a descoberta do Django começa no diretório atual e não encontra os testes se `manage.py test` for chamado a partir da raiz do repositório.
 ```bash
 # Executa toda a suíte de testes do backend
 python manage.py test
@@ -135,3 +135,5 @@ python manage.py test funcionarios
 - **Documentação da API e Banco:** Consulte [backend/README.md](backend/README.md)
 - **Documento de Visão:** Consulte [docs/doc-visao.md](docs/doc-visao.md)
 - **Documento de Modelos:** Consulte [docs/doc-modelos.md](docs/doc-modelos.md)
+- **Validação integrada e primeiro administrador:** Consulte [docs/validacao-integrada.md](docs/validacao-integrada.md)
+- **Relatório Scrum:** Consulte [docs/relatorio-scrum.pdf](docs/relatorio-scrum.pdf)
