@@ -149,8 +149,6 @@ Branches: existem 12 branches remotas, incluindo `docs/relatorio-final-ci`. `mai
 
 Issues: 27 issues registradas, todas fechadas. As issues de documentação, infraestrutura, autenticação, CRUD, validação integrada e correções estão associadas aos respectivos PRs.
 
-GitHub Projects: a API clássica de Projects retornou 404. A consulta ao Projects v2 falhou por falta do escopo `read:project` no token disponível. Não foi possível confirmar nem alterar o quadro com as permissões atuais. As issues, PRs e branches foram organizados conforme o histórico do repositório e o estado verificado pela API.
-
 Testes registrados no GitHub: a issue #16 cobria a validação integrada e foi fechada com o roteiro documentado. A issue #27 pedia a correção da descoberta dos testes e a inclusão de CI; a descoberta já funcionava no diretório correto, e o workflow `.github/workflows/ci.yml` passou a rodar testes Django, Vitest, lint e build nos pull requests.
 
 ## 9. Evidências
