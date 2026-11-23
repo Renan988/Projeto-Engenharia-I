@@ -50,16 +50,22 @@ Não existe `createsuperuser` com senha local. O procedimento abaixo evita deixa
 
 1. Crie a identidade no Supabase Auth pelo painel (**Authentication -> Users -> Add user**) ou pela Admin API com a chave `service_role`. Anote o `id` (UUID) devolvido.
 2. Aplique as migrações do Django para garantir a coluna `supabaseUserId` e a tabela `FUNCIONARIO`.
-3. Crie o perfil administrativo com uma das duas opções:
+3. Crie ou promova o perfil administrativo no SQL Editor do Supabase (substitua os valores abaixo pelos dados reais):
 
-   a. Pelo SQL Editor, com parâmetro (substitua os valores abaixo pelos dados reais):
+   a. Caso o gatilho `on_auth_user_created` já tenha criado o perfil como funcionário comum (`isAdmin = false`), promova-o para administrador:
+
+   ```sql
+   UPDATE "FUNCIONARIO"
+   SET "isAdmin" = true
+   WHERE "supabaseUserId" = 'UUID_DA_IDENTIDADE';
+   ```
+
+   b. Caso o perfil ainda não exista na tabela `FUNCIONARIO`, insira-o diretamente:
 
    ```sql
    INSERT INTO "FUNCIONARIO" ("supabaseUserId", "nome", "email", "isAdmin", "is_active")
    VALUES ('UUID_DA_IDENTIDADE', 'Administrador Intech', 'admin@intech.com.br', true, true);
    ```
-
-   b. Pela API, autenticando com o token do próprio administrador e usando `PATCH` em `/api/funcionarios/{id}/` para definir `isAdmin: true`. Isso exige que o perfil já exista como funcionário comum, criado pelo gatilho do SQL.
 
 4. Confirme o vínculo com `GET /api/funcionarios/me/` usando o token do administrador. A resposta deve trazer `isAdmin: true`.
 5. Guarde a chave `service_role` apenas no cofre do projeto. Não a coloque no frontend, em issues, no README ou em arquivos versionados. Se ela tiver sido exposta, rotacione-a no painel do Supabase.

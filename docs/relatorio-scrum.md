@@ -113,7 +113,7 @@ O que precisa mudar:
 - O comando `python manage.py test` retornou 0 testes em uma execução a partir da raiz do repositório. O diagnóstico foi corrigido: dentro de `backend/`, o comando padrão encontra os 33 testes. O README agora deixa essa exigência explícita, e a issue #27 registrou a inclusão do workflow de CI.
 - A validação ponta a ponta com credenciais reais do Supabase ainda não foi executada. O roteiro está em `docs/validacao-integrada.md`, e a issue #16 foi fechada com essa ressalva registrada.
 - O lint do frontend aponta um aviso em `src/app/layout.tsx`: o arquivo exporta algo além de componentes e isso atrapalha o Fast Refresh.
-- Não há workflow de CI no repositório. Testes e build foram executados localmente para este relatório.
+- Não havia workflow de CI no repositório durante as Sprints anteriores (adicionado no PR #28 com `.github/workflows/ci.yml`).
 
 Ações combinadas a partir desses pontos:
 
