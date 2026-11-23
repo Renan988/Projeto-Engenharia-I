@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from django.db import DatabaseError, connection
 from django.test import SimpleTestCase, override_settings
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from config.supabase_client import SupabaseAdminError, SupabaseClient
 
@@ -335,6 +335,46 @@ class SupabaseAuthAndFuncionarioTests(APITestCase):
         # Na listagem padrão de ativos, o funcionário inativado não aparece
         resp_list_after = self.client.get('/api/funcionarios/?email=contato@intech.com.br')
         self.assertEqual(len(resp_list_after.data), 0)
+
+    @patch('funcionarios.services.SupabaseClient.set_auth_user_active')
+    @patch('funcionarios.services.SupabaseClient.create_auth_user')
+    def test_vinculo_criado_no_crud_persiste_para_nova_sessao(self, mock_create_auth_user, mock_set_active):
+        """O vínculo gravado no CRUD resolve o perfil em uma requisição de outra sessão."""
+        identidade = uuid.uuid4()
+        mock_create_auth_user.return_value = identidade
+        self.autenticar_admin()
+
+        resposta_criacao = self.client.post(
+            '/api/funcionarios/',
+            {
+                'nome': 'Perfil Persistente',
+                'email': 'persistente@intech.com.br',
+                'senha': 'senha456',
+                'isAdmin': False,
+            },
+            format='json',
+        )
+        self.assertEqual(resposta_criacao.status_code, status.HTTP_201_CREATED)
+
+        outra_sessao = APIClient()
+        token = gerar_token_supabase(
+            email='persistente@intech.com.br',
+            sub=str(identidade),
+        )
+        outra_sessao.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        resposta_me = outra_sessao.get('/api/funcionarios/me/')
+        self.assertEqual(resposta_me.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            resposta_me.data['idFuncionario'],
+            resposta_criacao.data['idFuncionario'],
+        )
+        self.assertEqual(resposta_me.data['supabase_user_id'], str(identidade))
+        self.assertEqual(
+            Funcionario.objects.get(email='persistente@intech.com.br').supabase_user_id,
+            identidade,
+        )
+        mock_set_active.assert_not_called()
 
     @patch('funcionarios.services.SupabaseClient.set_auth_user_active')
     def test_exclusao_logica_por_id_inativa_usuario_e_rejeita_autenticacao(self, mock_set_active):
