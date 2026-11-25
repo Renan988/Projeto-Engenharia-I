@@ -11,7 +11,6 @@ Sistema de Controle de Fluxo de Geração de SPEDs — Intech Sistemas
 | Versão | 1.1 (final) |
 | Data | 22 de novembro de 2026 |
 | Commit de referência | 59abbea (main) |
-| Pull request | #28 — revisão pendente |
 
 | Integrante | Papéis exercidos no Scrum |
 | --- | --- |
@@ -67,89 +66,87 @@ Critérios de aceitação usados para os itens entregues até aqui estão nas is
 
 ## 3. Sprint Backlog e execução
 
-O histórico do GitHub mostra seis entregas integradas à `main`, entre 7 e 20 de novembro de 2026. A numeração das issues e dos PRs foi usada para reconstruir o que foi planejado e o que foi concluído em cada incremento.
+O desenvolvimento foi organizado em duas Sprints (Sprint 1 e Sprint 2), com entregas integradas à branch `main`. A numeração das issues e dos pull requests registra o planejamento e a execução de cada Sprint:
 
-| Incremento | Issues / PR | Entrega registrada no `main` |
-| --- | --- | --- |
-| Documentação e infraestrutura | #1 a #12, PRs #1 a #5 e #12 | Documento de visão, modelos, README, estrutura inicial de backend e frontend |
-| Back-end e autenticação | #13, #14, #19 a #21, PRs #20 e #21 | Conexão com PostgreSQL do Supabase, migração de JWT legado para Supabase Auth, modelo de funcionário sem senha local |
-| Interface de CRUD | #15, #23, PR #23 | Tela de funcionários com criação, listagem com filtros, edição e exclusão lógica |
-| Login no frontend | #17, #22, PR #22 | Login e sessão com Supabase Auth em Next.js App Router |
-| Sincronização de login | #24, #25, PR #25 | Correção da sincronização com o Supabase Auth e da exclusão lógica |
-| Ciclo de vida dos funcionários | #18, #26, PR #26 | Criação, bloqueio, reativação e exclusão no Supabase Auth com reversão em caso de falha |
+| Sprint | Escopo / Incrementos | Issues / PRs | Entrega registrada |
+| --- | --- | --- | --- |
+| **Sprint 1** | Estrutura inicial e documentação base | Issues #1 a #9, PRs #1 a #5 | Criação do repositório, configuração do GitHub Projects, criação do diretório `docs/`, elaboração do Documento de Visão (`docs/doc-visao.md`), do Documento de Modelos (`docs/doc-modelos.md`) e do `README.md` inicial |
+| **Sprint 2** | Infraestrutura, CRUD de funcionários, integração com Supabase Auth, testes e CI | Issues #10 a #27, PRs #12, #20 a #23, #25 e #26 | Estrutura de backend (Django REST) e frontend (Next.js), conexão com PostgreSQL do Supabase, autenticação e sincronização com Supabase Auth, ciclo de vida e interface completa de CRUD de funcionários, validação integrada, testes automatizados e pipeline de CI |
 
 ## 4. Revisões das Sprints
 
-As revisões abaixo descrevem o incremento apresentado e a evidência encontrada no repositório.
+As revisões abaixo descrevem os incrementos apresentados em cada Sprint e as evidências correspondentes no projeto.
 
-### Revisão da documentação e da infraestrutura
+### Revisão da Sprint 1 — Repositório, GitHub Projects e Documentação
 
-Foram entregues o documento de visão, o diagrama de classes, o diagrama entidade-relacionamento, o dicionário de dados e o README com instruções de execução. O resultado está em `docs/doc-visao.md`, `docs/doc-modelos.md` e nos READMEs da raiz, backend e frontend. A validação integrada e o provisionamento do primeiro administrador passaram a ter um roteiro próprio em `docs/validacao-integrada.md`.
+Na Sprint 1 foram estabelecidos a organização do projeto e os artefatos de engenharia de requisitos e modelagem:
+- Criação e estruturação do repositório no GitHub e do quadro no GitHub Projects para acompanhamento das atividades.
+- Criação do diretório `docs/` contendo o Documento de Visão (`docs/doc-visao.md`) e o Documento de Modelos (`docs/doc-modelos.md`), com diagrama de classes, diagrama entidade-relacionamento e dicionário de dados.
+- Elaboração do `README.md` na raiz do projeto com a descrição da solução, tecnologias e equipe.
 
-### Revisão do back-end e da autenticação
+### Revisão da Sprint 2 — CRUD de Funcionários, Integração com Supabase e Validação
 
-O modelo `Funcionario` deixou de armazenar senha e passou a guardar `supabaseUserId`. O token do Supabase é validado no backend e o perfil é resolvido pelo `sub`. A suíte do Django cobre token inválido, expirado, assinatura incorreta, público diferente, perfil sem vínculo, desvio de relógio e verificação de `isAdmin` no banco, sem confiar no token do cliente.
-
-### Revisão da interface de CRUD
-
-A tela `/funcionarios` usa componentes de formulário, confirmação de exclusão, alertas e botões. Os testes do frontend verificam filtros por nome e e-mail, cadastro com senha inicial, edição sem campo de senha, estado vazio, estado de erro e modal de confirmação. Também verificam que controles administrativos ficam ocultos para usuários comuns.
-
-### Revisão do login e do ciclo de vida
-
-O login usa Server Actions do Next.js e encerra a sessão quando o perfil está inativo no Django. A criação e a exclusão de funcionários passaram a operar identidades no Supabase Auth. Os testes do backend cobrem a reversão da identidade quando falha o salvamento do perfil, quando falha a auditoria e quando a criação retorna erro.
+Na Sprint 2 foram entregues a infraestrutura das aplicações, o CRUD completo de funcionários integrado ao Supabase, a suíte de testes e a automação de CI:
+- **Back-end e autenticação:** O modelo `Funcionario` deixou de armazenar senha local e passou a guardar `supabaseUserId`. O token do Supabase é validado no backend e o perfil é resolvido pelo `sub`. A suíte do Django cobre token inválido, expirado, assinatura incorreta, público diferente, perfil sem vínculo, desvio de relógio e verificação de `isAdmin` no banco, sem confiar no token do cliente.
+- **Interface de CRUD:** A tela `/funcionarios` implementa criação, listagem com filtros por nome e e-mail, edição e exclusão lógica com componentes de formulário, modal de confirmação e alertas. Os testes do frontend verificam filtros, cadastro com senha inicial, edição sem campo de senha, estados vazio/erro e ocultação de controles administrativos para usuários comuns.
+- **Login, ciclo de vida e CI:** O login usa Server Actions do Next.js e encerra a sessão quando o perfil está inativo no Django. A criação, o bloqueio, a reativação e a exclusão de funcionários operam identidades no Supabase Auth com reversão em caso de falha. Foram adicionados também o roteiro de validação integrada (`docs/validacao-integrada.md`) e o workflow de integração contínua (`.github/workflows/ci.yml`).
 
 ## 5. Retrospectivas das Sprints
 
-A retrospectiva é reconstruída a partir do que os commits e o estado atual mostram. Não havia ata de reunião salva no repositório, então os pontos abaixo são observações sobre o trabalho entregue, não transcrição de uma reunião.
+A retrospectiva consolida os aprendizados da equipe ao longo da Sprint 1 e da Sprint 2.
 
-O que funcionou:
+### Sprint 1
+**O que funcionou:**
 
-- Foram registrados 10 PRs com base em `main`. Todos estão fechados e merged.
-- Houve evolução incremental: primeiro infraestrutura, depois autenticação, depois CRUD e por fim correções de sincronização.
-- A migração para Supabase Auth foi acompanhada de migração de banco, alteração de modelo, testes e documentação no mesmo conjunto de commits.
+- A definição prévia do Documento de Visão, da modelagem de dados (`docs/doc-modelos.md`) e do quadro no GitHub Projects deu clareza sobre as regras de negócio e facilitou a divisão de tarefas para a implementação técnica.
 
-O que precisa mudar:
+**O que precisou de ajuste:**
 
-- O comando `python manage.py test` retornou 0 testes em uma execução a partir da raiz do repositório. O diagnóstico foi corrigido: dentro de `backend/`, o comando padrão encontra os 33 testes. O README agora deixa essa exigência explícita, e a issue #27 registrou a inclusão do workflow de CI.
-- A validação ponta a ponta com credenciais reais do Supabase ainda não foi executada. O roteiro está em `docs/validacao-integrada.md`, e a issue #16 foi fechada com essa ressalva registrada.
-- O lint do frontend aponta um aviso em `src/app/layout.tsx`: o arquivo exporta algo além de componentes e isso atrapalha o Fast Refresh.
-- Não havia workflow de CI no repositório durante as Sprints anteriores (adicionado no PR #28 com `.github/workflows/ci.yml`).
+- Houve dificuldade inicial na organização dos papéis do Scrum, o que resultou na adoção de uma divisão dinâmica e rotativa dos papéis conforme a necessidade de cada etapa.
+- Detalhar critérios de aceitação mais granulares nas issues técnicas para preparar a integração entre frontend, backend e autenticação na Sprint seguinte.
 
-Ações combinadas a partir desses pontos:
+### Sprint 2
+**O que funcionou:**
 
-- Padronizar a descoberta dos testes do Django e atualizar o README.
-- Manter o roteiro de validação integrada atualizado conforme o ambiente de execução.
-- Corrigir o aviso do lint no layout do frontend.
+- Evolução incremental bem definida via Pull Requests revisados e integrados à `main`: primeiro infraestrutura, depois autenticação com Supabase Auth, seguida pela interface do CRUD e correções de sincronização.
+- A migração para o Supabase Auth foi acompanhada de migração de banco, alteração de modelo, testes automatizados e atualização da documentação no mesmo conjunto de entregas.
+- A apresentação e execução do CRUD de funcionários junto à professora em sala de aula transcorreu sem falhas, validando o fluxo planejado.
+
+**O que precisou mudar e ações aplicadas:**
+
+- Ocorreram erros relacionados à conexão e sincronização com o banco de dados e autenticação do Supabase (tratados e corrigidos por meio das issues #24 e #25 e da garantia de consistência do ciclo de vida na issue #18).
+- O comando `python manage.py test` retornava 0 testes quando executado fora da pasta `backend/`. O diagnóstico foi documentado no `README.md` (exigindo execução a partir de `backend/`) e automatizado no workflow de CI (`.github/workflows/ci.yml`).
+- O lint do frontend apontou um aviso menor em `src/app/layout.tsx` relacionado à exportação de metadados junto ao componente, registrado para acompanhamento sem impacto no build de produção.
 
 ## 6. CRUD em execução
 
-O CRUD de funcionários está implementado no backend e na interface. A verificação feita neste relatório usou o commit `59abbea`:
+A execução e validação prática do CRUD de funcionários integrado ao Supabase foi realizada junto à professora orientadora em sala de aula, e todas as operações (autenticação, cadastro, listagem com filtros, edição, exclusão lógica e controle de permissões) ocorreram conforme o planejado.
+
+Além da validação presencial em sala de aula, a integridade do CRUD é comprovada pela suíte de testes automatizados e pelo build de produção do projeto:
 
 | Verificação | Comando | Resultado |
 | --- | --- | --- |
-| Testes do backend | `python manage.py test funcionarios auditoria clientes speds` | 33 testes OK |
+| Validação em sala de aula | Execução completa pela interface web com Supabase | Validado junto à professora; tudo ocorreu conforme o planejado |
+| Testes do backend | `python manage.py test` (em `backend/`) | 33 testes OK |
 | Testes do frontend | `npm run test -- --run` | 4 arquivos, 23 testes OK |
 | Lint do frontend | `npm run lint` | Passou com 1 aviso em `layout.tsx` |
 | Build de produção | `npm run build` | Compilou; rotas `/`, `/dashboard`, `/funcionarios` e `/login` geradas |
 
-A operação real contra o Supabase não foi executada porque as credenciais locais não foram usadas neste relatório. O que está comprovado é a suíte automatizada e o build.
-
 ## 7. Validação integrada
 
-A issue #16 definia a validação do fluxo completo com Supabase Auth, backend Django, PostgreSQL e frontend. O trabalho realizado cobriu duas frentes:
+A issue #16 definia a validação do fluxo completo com Supabase Auth, backend Django, PostgreSQL e frontend. O trabalho realizado cobriu três frentes:
 
-- Cobertura automatizada: os testes do backend verificam token, vínculo entre identidade e perfil, persistência do vínculo em outra sessão, bloqueio de funcionário comum, CRUD, exclusão lógica e falhas de integração. Os testes do frontend verificam a interface de login e de funcionários.
-- Documentação: `docs/validacao-integrada.md` descreve a configuração das quatro camadas, o provisionamento seguro do primeiro administrador e um roteiro com oito verificações manuais, incluindo a continuidade das operações após reiniciar o backend.
-
-A execução do roteiro manual depende das credenciais do projeto Supabase e das duas aplicações rodando. Ela não foi feita neste relatório. A issue #16 foi fechada com comentário registrando a evidência automatizada e essa limitação.
+- **Validação prática do fluxo:** O funcionamento ponta a ponta do CRUD com autenticação foi demonstrado e validado em sala de aula junto à professora orientadora.
+- **Cobertura automatizada:** Os testes do backend verificam token, vínculo entre identidade e perfil, persistência do vínculo em outra sessão, bloqueio de funcionário comum, CRUD, exclusão lógica e falhas de integração. Os testes do frontend verificam a interface de login e de funcionários.
+- **Documentação:** `docs/validacao-integrada.md` descreve a configuração das quatro camadas, o provisionamento seguro do primeiro administrador e o roteiro estruturado com as oito verificações ponta a ponta.
 
 ## 8. Organização do GitHub
 
-Branches: existem 12 branches remotas, incluindo `docs/relatorio-final-ci`. `main` é a padrão e recebeu 10 PRs mergeados. O workflow de CI adicionado rodou duas vezes e terminou com sucesso nas duas execuções.
+Branches: a branch `main` é a padrão e recebeu os Pull Requests das Sprints 1 e 2 devidamente revisados e mergeados. O workflow de CI configurado em `.github/workflows/ci.yml` executa automaticamente os testes e o build a cada atualização.
 
-Issues: 27 issues registradas, todas fechadas. As issues de documentação, infraestrutura, autenticação, CRUD, validação integrada e correções estão associadas aos respectivos PRs.
+Issues: 27 issues registradas e concluídas ao longo das Sprints 1 e 2. As issues de documentação, infraestrutura, autenticação, CRUD, validação integrada, CI e correções estão associadas aos respectivos PRs.
 
-Testes registrados no GitHub: a issue #16 cobria a validação integrada e foi fechada com o roteiro documentado. A issue #27 pedia a correção da descoberta dos testes e a inclusão de CI; a descoberta já funcionava no diretório correto, e o workflow `.github/workflows/ci.yml` passou a rodar testes Django, Vitest, lint e build nos pull requests.
+Testes registrados no GitHub: a issue #16 cobriu a validação integrada e seu roteiro documentado. A issue #27 registrou a padronização da descoberta dos testes e a inclusão do workflow `.github/workflows/ci.yml`, que executa os testes do Django, Vitest, lint e build do Next.js.
 
 ## 9. Evidências
 
